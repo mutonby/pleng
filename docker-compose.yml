@@ -50,15 +50,12 @@ services:
       start_period: 10s
     labels:
       - "traefik.enable=true"
-      # API + skill.md on panel subdomain
+      - "traefik.http.services.platform-api.loadbalancer.server.port=8000"
+      # sslip.io routing — higher priority than dashboard
       - "traefik.http.routers.platform-api.rule=Host(`panel.${PUBLIC_IP:-127.0.0.1}.sslip.io`) && (PathPrefix(`/api`) || Path(`/skill.md`))"
       - "traefik.http.routers.platform-api.entrypoints=web"
-      - "traefik.http.services.platform-api.loadbalancer.server.port=8000"
-      # Custom domain
-      - "traefik.http.routers.platform-api-custom.rule=Host(`${BASE_DOMAIN:-panel.localhost}`) && (PathPrefix(`/api`) || Path(`/skill.md`))"
-      - "traefik.http.routers.platform-api-custom.entrypoints=web,websecure"
-      - "traefik.http.routers.platform-api-custom.tls.certresolver=letsencrypt"
-      - "traefik.http.services.platform-api-custom.loadbalancer.server.port=8000"
+      - "traefik.http.routers.platform-api.service=platform-api"
+      - "traefik.http.routers.platform-api.priority=100"
 
   # ── AI Agent ──────────────────────────────────────────
   agent:
@@ -111,14 +108,15 @@ services:
       - internal
     labels:
       - "traefik.enable=true"
+      - "traefik.http.services.analytics.loadbalancer.server.port=8000"
       - "traefik.http.routers.analytics-collect.rule=PathPrefix(`/api/collect`)"
       - "traefik.http.routers.analytics-collect.entrypoints=web"
       - "traefik.http.routers.analytics-collect.priority=200"
-      - "traefik.http.services.analytics-collect.loadbalancer.server.port=8000"
+      - "traefik.http.routers.analytics-collect.service=analytics"
       - "traefik.http.routers.analytics-script.rule=Path(`/t.js`)"
       - "traefik.http.routers.analytics-script.entrypoints=web"
       - "traefik.http.routers.analytics-script.priority=200"
-      - "traefik.http.services.analytics-script.loadbalancer.server.port=8000"
+      - "traefik.http.routers.analytics-script.service=analytics"
 
   # ── Dashboard ─────────────────────────────────────────
   dashboard:
@@ -131,13 +129,10 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=80"
       - "traefik.http.routers.dashboard.rule=Host(`panel.${PUBLIC_IP:-127.0.0.1}.sslip.io`)"
       - "traefik.http.routers.dashboard.entrypoints=web"
-      - "traefik.http.services.dashboard.loadbalancer.server.port=80"
-      - "traefik.http.routers.dashboard-custom.rule=Host(`${BASE_DOMAIN:-panel.localhost}`)"
-      - "traefik.http.routers.dashboard-custom.entrypoints=web,websecure"
-      - "traefik.http.routers.dashboard-custom.tls.certresolver=letsencrypt"
-      - "traefik.http.services.dashboard-custom.loadbalancer.server.port=80"
+      - "traefik.http.routers.dashboard.service=dashboard"
 
 networks:
   web:

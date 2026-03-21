@@ -70,12 +70,16 @@ async def auth_middleware(request: Request, call_next):
     if request.method == "OPTIONS":
         return await call_next(request)
 
-    # Internal network — no auth needed (container-to-container)
+    # Internal network — no auth needed (direct container-to-container)
+    # But if X-Forwarded-For is set, it came through Traefik = external
     client_ip = request.client.host if request.client else ""
-    if _is_internal(client_ip):
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    is_proxied = bool(forwarded_for)
+
+    if _is_internal(client_ip) and not is_proxied:
         return await call_next(request)
 
-    # External — check API key
+    # External (or proxied through Traefik) — check API key
     api_key = (
         request.headers.get("X-API-Key", "")
         or request.headers.get("Authorization", "").removeprefix("Bearer ")
