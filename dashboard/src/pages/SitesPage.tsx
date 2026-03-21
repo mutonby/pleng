@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ExternalLink, Rocket } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 import { api } from '../lib/api'
 import { statusColors, cn, formatDate } from '../lib/utils'
 
@@ -13,19 +13,11 @@ export default function SitesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Sites</h2>
-        <Link to="/deploy" className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-sm">
-          <Rocket size={16} /> Deploy
-        </Link>
-      </div>
+      <h2 className="text-2xl font-bold">Sites</h2>
 
       {sites.length === 0 ? (
         <div className="bg-surface-800 rounded-xl p-8 border border-gray-700/50 text-center">
-          <p className="text-gray-500 mb-3">No sites yet.</p>
-          <Link to="/deploy" className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-sm">
-            <Rocket size={16} /> Deploy
-          </Link>
+          <p className="text-gray-500">No sites yet. Talk to the agent via Telegram to deploy something.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Globe, ExternalLink, Rocket } from 'lucide-react'
+import { Globe, ExternalLink } from 'lucide-react'
 import { api } from '../lib/api'
 import { statusColors, cn, formatDate } from '../lib/utils'
 
@@ -9,6 +9,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     api.get('/sites').then((d) => setSites(Array.isArray(d) ? d : [])).catch(() => {})
+    // Auto-refresh every 10s
+    const interval = setInterval(() => {
+      api.get('/sites').then((d) => setSites(Array.isArray(d) ? d : [])).catch(() => {})
+    }, 10000)
+    return () => clearInterval(interval)
   }, [])
 
   const staging = sites.filter(s => s.status === 'staging').length
@@ -17,32 +22,21 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Dashboard</h2>
-        <Link to="/deploy"
-          className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-sm transition-colors">
-          <Rocket size={16} /> Deploy
-        </Link>
-      </div>
+      <h2 className="text-2xl font-bold">Dashboard</h2>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
+        <Stat label="Total" value={sites.length} color="text-primary-400" />
         <Stat label="Staging" value={staging} color="text-yellow-400" />
         <Stat label="Production" value={production} color="text-green-400" />
         <Stat label="Errors" value={errors} color="text-red-400" />
       </div>
 
       <div className="bg-surface-800 rounded-xl p-4 border border-gray-700/50">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold flex items-center gap-2"><Globe size={16} /> Sites</h3>
-          <Link to="/sites" className="text-xs text-primary-400 hover:underline">All</Link>
-        </div>
+        <h3 className="font-semibold flex items-center gap-2 mb-3"><Globe size={16} /> Sites</h3>
         {sites.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-sm text-gray-500 mb-3">No sites yet.</p>
-            <Link to="/deploy" className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-sm">
-              <Rocket size={16} /> Deploy your first app
-            </Link>
-          </div>
+          <p className="text-sm text-gray-500 py-4 text-center">
+            No sites yet. Talk to the agent via Telegram to deploy something.
+          </p>
         ) : (
           <div className="space-y-2">
             {sites.map((s: any) => {

@@ -31,8 +31,10 @@ services:
     environment:
       - PUBLIC_IP=${PUBLIC_IP:-127.0.0.1}
       - BASE_DOMAIN=${BASE_DOMAIN:-}
+      - WEB_UI_PASSWORD=${WEB_UI_PASSWORD:-admin}
       - DATABASE_PATH=/data/pleng.db
       - PROJECTS_DIR=/projects
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - projects:/projects
@@ -40,14 +42,20 @@ services:
     networks:
       - web
       - internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/health', timeout=3)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     labels:
       - "traefik.enable=true"
-      # API on panel subdomain /api
-      - "traefik.http.routers.platform-api.rule=Host(`panel.${PUBLIC_IP:-127.0.0.1}.sslip.io`) && PathPrefix(`/api`)"
+      # API + skill.md on panel subdomain
+      - "traefik.http.routers.platform-api.rule=Host(`panel.${PUBLIC_IP:-127.0.0.1}.sslip.io`) && (PathPrefix(`/api`) || Path(`/skill.md`))"
       - "traefik.http.routers.platform-api.entrypoints=web"
       - "traefik.http.services.platform-api.loadbalancer.server.port=8000"
-      # Also on custom base domain if set
-      - "traefik.http.routers.platform-api-custom.rule=Host(`${BASE_DOMAIN:-panel.localhost}`) && PathPrefix(`/api`)"
+      # Custom domain
+      - "traefik.http.routers.platform-api-custom.rule=Host(`${BASE_DOMAIN:-panel.localhost}`) && (PathPrefix(`/api`) || Path(`/skill.md`))"
       - "traefik.http.routers.platform-api-custom.entrypoints=web,websecure"
       - "traefik.http.routers.platform-api-custom.tls.certresolver=letsencrypt"
       - "traefik.http.services.platform-api-custom.loadbalancer.server.port=8000"
@@ -65,6 +73,15 @@ services:
       - projects:/projects
     networks:
       - internal
+    depends_on:
+      platform-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
 
   # ── Telegram Bot ──────────────────────────────────────
   telegram-bot:
@@ -78,7 +95,8 @@ services:
     networks:
       - internal
     depends_on:
-      - agent
+      agent:
+        condition: service_healthy
 
   # ── Analytics ─────────────────────────────────────────
   analytics:
@@ -93,12 +111,10 @@ services:
       - internal
     labels:
       - "traefik.enable=true"
-      # Collector endpoint (any domain can POST here)
       - "traefik.http.routers.analytics-collect.rule=PathPrefix(`/api/collect`)"
       - "traefik.http.routers.analytics-collect.entrypoints=web"
       - "traefik.http.routers.analytics-collect.priority=200"
       - "traefik.http.services.analytics-collect.loadbalancer.server.port=8000"
-      # Tracking script
       - "traefik.http.routers.analytics-script.rule=Path(`/t.js`)"
       - "traefik.http.routers.analytics-script.entrypoints=web"
       - "traefik.http.routers.analytics-script.priority=200"
@@ -110,12 +126,14 @@ services:
     restart: unless-stopped
     networks:
       - web
+    depends_on:
+      platform-api:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dashboard.rule=Host(`panel.${PUBLIC_IP:-127.0.0.1}.sslip.io`)"
       - "traefik.http.routers.dashboard.entrypoints=web"
       - "traefik.http.services.dashboard.loadbalancer.server.port=80"
-      # Custom domain
       - "traefik.http.routers.dashboard-custom.rule=Host(`${BASE_DOMAIN:-panel.localhost}`)"
       - "traefik.http.routers.dashboard-custom.entrypoints=web,websecure"
       - "traefik.http.routers.dashboard-custom.tls.certresolver=letsencrypt"

@@ -63,7 +63,7 @@ async def auth_middleware(request: Request, call_next):
     path = request.url.path
 
     # Public endpoints — no auth
-    if path in ("/api/health", "/skill.md", "/api/collect", "/t.js"):
+    if path in ("/api/health", "/skill.md", "/api/collect", "/t.js", "/api/auth/login"):
         return await call_next(request)
     if path == "/internal/key":
         return await call_next(request)
@@ -100,6 +100,20 @@ def get_api_key(request: Request):
     return {"api_key": _api_key}
 
 
+# ── Auth ─────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    password: str
+
+@app.post("/api/auth/login")
+def login(body: LoginRequest):
+    """Dashboard login. Returns API key if password matches."""
+    expected = os.environ.get("WEB_UI_PASSWORD", "admin")
+    if body.password != expected:
+        raise HTTPException(401, "Wrong password")
+    return {"api_key": _api_key}
+
+
 # ── Models ──────────────────────────────────────────────
 
 class DeployCompose(BaseModel):
@@ -111,10 +125,6 @@ class DeployGit(BaseModel):
     name: str
     repo_url: str
     branch: str = "main"
-
-class DeployGenerate(BaseModel):
-    name: str
-    description: str
 
 class PromoteSite(BaseModel):
     domain: str
@@ -157,6 +167,7 @@ async def api_deploy_upload(name: str = Form(...), file: UploadFile = File(...))
     """Upload a tar.gz of a project and deploy it.
 
     For external agents (Claude Code on your Mac, etc.) to deploy without git.
+    tar -czf project.tar.gz -C /path/to/project .
     """
     existing = db.get_site_by_name(name)
     if existing:
@@ -168,7 +179,6 @@ async def api_deploy_upload(name: str = Form(...), file: UploadFile = File(...))
         workspace = os.path.join(deployer.PROJECTS_DIR, site["id"])
         os.makedirs(workspace, exist_ok=True)
 
-        # Save and extract upload
         with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
             content = await file.read()
             tmp.write(content)
@@ -180,17 +190,15 @@ async def api_deploy_upload(name: str = Form(...), file: UploadFile = File(...))
 
         db.add_site_log(site["id"], f"Uploaded and extracted ({len(content)} bytes)")
 
-        # Check for docker-compose.yml
+        # Check for docker-compose.yml (might be nested one level deep from tar)
         compose_file = os.path.join(workspace, "docker-compose.yml")
         if not os.path.exists(compose_file):
-            # Look one level deeper (tar might have a root folder)
             for item in os.listdir(workspace):
                 sub = os.path.join(workspace, item, "docker-compose.yml")
                 if os.path.exists(sub):
-                    # Move contents up
                     src_dir = os.path.join(workspace, item)
-                    for f in os.listdir(src_dir):
-                        shutil.move(os.path.join(src_dir, f), os.path.join(workspace, f))
+                    for f_name in os.listdir(src_dir):
+                        shutil.move(os.path.join(src_dir, f_name), os.path.join(workspace, f_name))
                     os.rmdir(src_dir)
                     break
 
@@ -201,25 +209,6 @@ async def api_deploy_upload(name: str = Form(...), file: UploadFile = File(...))
         db.update_site(site["id"], status="error")
         db.add_site_log(site["id"], str(e), level="error")
         raise HTTPException(500, str(e))
-
-
-@app.post("/api/deploy/generate")
-def api_deploy_generate(body: DeployGenerate):
-    """Create workspace for AI agent to generate code, then deploy."""
-    existing = db.get_site_by_name(body.name)
-    if existing:
-        raise HTTPException(400, f"Site '{body.name}' already exists")
-    site = db.create_site(body.name, deploy_mode="generate", description=body.description)
-    workspace = os.path.join(deployer.PROJECTS_DIR, site["id"])
-    os.makedirs(workspace, exist_ok=True)
-    db.update_site(site["id"], status="generating", project_path=workspace)
-    db.add_site_log(site["id"], f"Workspace ready at {workspace}")
-    return {
-        "site_id": site["id"],
-        "name": body.name,
-        "status": "generating",
-        "workspace": workspace,
-    }
 
 
 # ── Site operations ─────────────────────────────────────
@@ -331,13 +320,7 @@ Content-Type: multipart/form-data
 Fields: name=my-app, file=@project.tar.gz
 ```
 To create the tarball: `tar -czf project.tar.gz -C /path/to/project .`
-
-## Ask the AI agent to generate a project
-```
-POST {base}/api/deploy/generate
-X-API-Key: <key>
-Body: {{"name": "my-app", "description": "A booking API with Postgres"}}
-```
+The project MUST contain a docker-compose.yml (or at least a Dockerfile).
 
 ## List all sites
 ```
