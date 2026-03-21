@@ -1,0 +1,133 @@
+services:
+  # ── Reverse Proxy ─────────────────────────────────────
+  traefik:
+    image: traefik:v3.4
+    restart: unless-stopped
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=pleng_web"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    networks:
+      - web
+
+  # ── Platform API ──────────────────────────────────────
+  platform-api:
+    build: ./platform-api
+    restart: unless-stopped
+    environment:
+      - PUBLIC_IP=${PUBLIC_IP:-127.0.0.1}
+      - BASE_DOMAIN=${BASE_DOMAIN:-}
+      - DATABASE_PATH=/data/pleng.db
+      - PROJECTS_DIR=/projects
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - projects:/projects
+      - platform_data:/data
+    networks:
+      - web
+      - internal
+    labels:
+      - "traefik.enable=true"
+      # API on panel subdomain /api
+      - "traefik.http.routers.platform-api.rule=Host(`panel.${PUBLIC_IP:-127.0.0.1}.sslip.io`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.platform-api.entrypoints=web"
+      - "traefik.http.services.platform-api.loadbalancer.server.port=8000"
+      # Also on custom base domain if set
+      - "traefik.http.routers.platform-api-custom.rule=Host(`${BASE_DOMAIN:-panel.localhost}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.platform-api-custom.entrypoints=web,websecure"
+      - "traefik.http.routers.platform-api-custom.tls.certresolver=letsencrypt"
+      - "traefik.http.services.platform-api-custom.loadbalancer.server.port=8000"
+
+  # ── AI Agent ──────────────────────────────────────────
+  agent:
+    build: ./agent
+    restart: unless-stopped
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - MODEL_NAME=${MODEL_NAME:-claude-sonnet-4-20250514}
+      - PLATFORM_API_URL=http://platform-api:8000
+      - PROJECTS_DIR=/projects
+    volumes:
+      - projects:/projects
+    networks:
+      - internal
+
+  # ── Telegram Bot ──────────────────────────────────────
+  telegram-bot:
+    build: ./telegram-bot
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - AGENT_URL=http://agent:8000
+      - PLATFORM_API_URL=http://platform-api:8000
+    networks:
+      - internal
+    depends_on:
+      - agent
+
+  # ── Analytics ─────────────────────────────────────────
+  analytics:
+    build: ./analytics
+    restart: unless-stopped
+    environment:
+      - DATABASE_PATH=/data/analytics.db
+    volumes:
+      - analytics_data:/data
+    networks:
+      - web
+      - internal
+    labels:
+      - "traefik.enable=true"
+      # Collector endpoint (any domain can POST here)
+      - "traefik.http.routers.analytics-collect.rule=PathPrefix(`/api/collect`)"
+      - "traefik.http.routers.analytics-collect.entrypoints=web"
+      - "traefik.http.routers.analytics-collect.priority=200"
+      - "traefik.http.services.analytics-collect.loadbalancer.server.port=8000"
+      # Tracking script
+      - "traefik.http.routers.analytics-script.rule=Path(`/t.js`)"
+      - "traefik.http.routers.analytics-script.entrypoints=web"
+      - "traefik.http.routers.analytics-script.priority=200"
+      - "traefik.http.services.analytics-script.loadbalancer.server.port=8000"
+
+  # ── Dashboard ─────────────────────────────────────────
+  dashboard:
+    build: ./dashboard
+    restart: unless-stopped
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`panel.${PUBLIC_IP:-127.0.0.1}.sslip.io`)"
+      - "traefik.http.routers.dashboard.entrypoints=web"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=80"
+      # Custom domain
+      - "traefik.http.routers.dashboard-custom.rule=Host(`${BASE_DOMAIN:-panel.localhost}`)"
+      - "traefik.http.routers.dashboard-custom.entrypoints=web,websecure"
+      - "traefik.http.routers.dashboard-custom.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dashboard-custom.loadbalancer.server.port=80"
+
+networks:
+  web:
+    name: pleng_web
+  internal:
+
+volumes:
+  projects:
+  platform_data:
+  analytics_data:
+  letsencrypt:

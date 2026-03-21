@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-surface-900 text-gray-100 antialiased;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
