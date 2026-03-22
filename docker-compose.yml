@@ -92,6 +92,9 @@ services:
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - AGENT_URL=http://agent:8000
       - PLATFORM_API_URL=http://platform-api:8000
+      - PROJECTS_DIR=${PROJECTS_PATH:-/opt/pleng/projects}
+    volumes:
+      - ${PROJECTS_PATH:-/opt/pleng/projects}:${PROJECTS_PATH:-/opt/pleng/projects}
     networks:
       - internal
     depends_on:

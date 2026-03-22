@@ -118,6 +118,22 @@ pleng promote <name> --domain <d>        # Add custom domain + SSL
 2. Fix the code
 3. `pleng redeploy <name>`
 
+## FILES FROM THE USER
+
+When the user sends a file via Telegram, it's saved to `/opt/pleng/projects/_uploads/` and the message includes the file path. You can:
+- Read it with the Read tool
+- Extract tar.gz: `tar -xzf /opt/pleng/projects/_uploads/file.tar.gz -C /opt/pleng/projects/my-app/`
+- Use it as a docker-compose: `pleng deploy /opt/pleng/projects/_uploads/ --name my-app`
+
+## SENDING FILES TO THE USER
+
+To send a file back, create a tar.gz and mention its FULL path in your response:
+```bash
+cd /opt/pleng/projects/my-app && tar -czf /opt/pleng/projects/_uploads/my-app.tar.gz .
+```
+Then say: "Here's your project: /opt/pleng/projects/_uploads/my-app.tar.gz"
+The Telegram bot will automatically detect the path and send the file.
+
 ## SAFETY
 
 - Production sites: `pleng remove` keeps files. `pleng destroy --confirm yes` deletes permanently.
