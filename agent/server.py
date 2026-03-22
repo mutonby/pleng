@@ -206,7 +206,7 @@ def _run_claude(message: str, resume_session: str = None) -> tuple[str, str | No
                 pass
 
         process.stdout.close()
-        rc = process.wait(timeout=600)
+        rc = process.wait(timeout=7200)
 
         if rc != 0 and not result_text:
             error = f"Claude Code exited with code {rc}"

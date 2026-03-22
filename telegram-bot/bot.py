@@ -212,7 +212,7 @@ def _agent_respond(chat_id: str, message: str):
         r = requests.post(
             f"{AGENT_URL}/chat",
             json={"message": message, "session_id": chat_id},
-            timeout=900,  # 15 minutes for big generations
+            timeout=7200,  # 2 hours max
         )
         data = r.json()
         response = data.get("response", "No response.")
