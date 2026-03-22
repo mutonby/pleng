@@ -3,7 +3,7 @@
   <p align="center"><strong>The first self-hosted, AI-native PaaS.</strong></p>
   <p align="center">
     Install on any VPS. Deploy apps by talking to an AI agent.<br/>
-    Telegram, terminal, dashboard, or any external AI tool via skill.md.
+    Telegram, terminal, or any external AI tool via skill.md.
   </p>
 </p>
 
@@ -32,80 +32,119 @@ The quadrant **"self-hosted + AI-native"** is completely empty. Pleng fills it.
 git clone https://github.com/your-org/pleng
 cd pleng
 cp .env.example .env
-# Edit .env: ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PUBLIC_IP
+# Edit .env with your keys (see below)
 docker compose up -d
 ```
 
-Done. You now have:
-- **Dashboard** at `http://panel.YOUR-IP.sslip.io`
-- **Telegram bot** listening for commands
-- **Terminal** via `make chat`
-- **skill.md** at `http://panel.YOUR-IP.sslip.io/skill.md` for external agents
+That's it. 6 containers start up. You now have:
+
+| What | Where |
+|---|---|
+| **Dashboard** | `http://panel.YOUR-IP.sslip.io` |
+| **Telegram bot** | `@your_bot` (listening) |
+| **Terminal** | `make chat` on the VPS |
+| **skill.md** | `http://panel.YOUR-IP.sslip.io/skill.md` |
+| **API key** | `docker compose logs platform-api` (printed on startup) |
+
+### Required env vars
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...       # For the AI agent (Claude Code)
+TELEGRAM_BOT_TOKEN=123456:ABC...   # From @BotFather
+TELEGRAM_CHAT_ID=123456789         # Your chat ID
+PUBLIC_IP=89.141.205.249           # Your VPS public IP
+```
 
 ## How it works
 
 You tell the agent what you want. It does the rest.
 
 ```
-You: "hazme una API de reservas con Postgres"
+You (Telegram): "hazme una API de reservas con Postgres"
 
-Agent: writes code → creates Dockerfile → creates docker-compose.yml
-       → deploys containers → configures Traefik → assigns subdomain
+Agent: creates /projects/reservas/
+       writes app.py, Dockerfile, docker-compose.yml
+       runs: pleng deploy /projects/reservas --name reservas
 
-Agent: "Listo. Tu API: http://a3f2.178.63.85.114.sslip.io"
+Platform API: docker compose up → Traefik labels → sslip.io subdomain
 
+Agent: "Listo. http://a3f2.89.141.205.249.sslip.io"
+```
+
+Later:
+
+```
 You: "ponle reservas.midominio.com"
 
-Agent: updates Traefik → Let's Encrypt SSL → done
+Agent: runs: pleng promote reservas --domain reservas.midominio.com
 
-Agent: "Listo. https://reservas.midominio.com con SSL"
+Platform API: updates Traefik → Let's Encrypt SSL
+
+Agent: "Listo. https://reservas.midominio.com"
 ```
 
 ### The lifecycle
 
-1. Everything starts as **staging** with a free sslip.io subdomain. No domain needed.
+```
+ ┌─────────┐    promote     ┌────────────┐
+ │ STAGING │ ─────────────▶ │ PRODUCTION │
+ │  free   │  custom domain │   HTTPS    │
+ │ sslip.io│  + Let's       │            │
+ └─────────┘  Encrypt       └────────────┘
+      │                           │
+      ▼                           ▼
+   stop / remove              stop / remove
+```
+
+1. Everything starts as **staging** with a free `http://{hash}.{IP}.sslip.io` URL. No domain needed.
 2. You can have 10 projects in staging with zero effort.
-3. The ones you like, you **promote to production** with a custom domain + SSL.
-4. The ones you don't, you stop or remove.
+3. The ones you like, **promote** to production with a custom domain → automatic HTTPS.
+4. The ones you don't, stop or remove.
 5. No git, no CI/CD, no pipelines. Just talking.
 
 ### Three ways to deploy
 
 | Mode | You say | What happens |
 |---|---|---|
-| **Git repo** | "deploy github.com/user/repo" | Clones, detects stack, deploys |
-| **Docker Compose** | "deploy this compose" (send file) | Reads it, starts containers |
-| **AI Generate** | "build me a color converter tool" | Claude Code writes everything, then deploys |
+| **Git repo** | "despliega github.com/user/repo" | Clones, detects stack, deploys |
+| **Docker Compose** | "despliega este compose" (sends file) | Reads it, starts containers |
+| **AI Generate** | "hazme una tool de colores" | Claude Code writes everything, then deploys |
+
+All three produce the same result: containers running behind Traefik with a staging URL.
 
 ## The 4 doors
 
-Same agent, same workspace, same containers. Four ways to talk to it:
+Same agent, same workspace, same containers. Four ways in:
 
-### 1. Terminal (on the VPS)
+### 1. Telegram (from anywhere)
+```
+You: "qué tal las visitas de mi landing?"
+Pleng: "42 visitors, 128 pageviews esta semana."
+
+You: "el API va lento, qué pasa"
+Pleng: [reads Docker logs, diagnoses] "El container está OOMKilled.
+        Recomiendo añadir mem_limit: 512m al compose."
+
+You: "reinicia reservas"
+Pleng: "Reiniciado."
+```
+Quick commands from the subway. The agent resolves it alone.
+
+### 2. Terminal (on the VPS)
 ```bash
 make chat
 # or: docker compose exec -it agent pleng chat
 
-You: deploy github.com/user/my-api --name bookings
+You: despliega github.com/user/my-api --name bookings
 Pleng: Cloning... deploying... Live at http://a3f2.1.2.3.4.sslip.io
 ```
-Full Claude Code experience. See diffs, files, logs. Iterate for hours.
+Full Claude Code experience. Diffs, files, logs. Iterate for hours.
 
-### 2. Telegram (from anywhere)
-```
-You: "qué tal las visitas de mi landing?"
-Pleng: "42 visitors, 128 pageviews esta semana. Top page: /pricing"
+### 3. Dashboard (read-only web panel)
 
-You: "el API va lento, qué pasa"
-Pleng: [reads Docker logs, diagnoses] "El container está al 95% de RAM.
-        Recomiendo aumentar el límite en el compose."
-```
-Quick commands from the subway. The agent resolves it alone.
-
-### 3. Dashboard (web)
 `http://panel.YOUR-IP.sslip.io`
 
-Visual overview: all sites, their status, URLs, logs, analytics. Deploy page with 3-mode selector. Promote staging to production with one click.
+See all your sites, their status, URLs, Docker logs, and build history. Password-protected. The dashboard is **read-only** — all operations go through the agent.
 
 ### 4. Any external AI agent (skill.md)
 ```
@@ -115,48 +154,62 @@ You: "read http://panel.myserver.com/skill.md and deploy my project"
 Claude Code: [reads skill.md, learns the API, deploys your code to the VPS]
 ```
 
-The skill.md is auto-generated with the correct API URLs for your instance. Any AI tool that can do HTTP can deploy to your Pleng.
+The skill.md is auto-generated with the correct API URL for your instance. Any AI tool that can do HTTP can deploy to your Pleng. Authentication via API key (printed in logs on startup).
+
+**External agents only deploy existing code** (git repo or upload). They don't generate projects — that's what the built-in agent does.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│                    Your VPS                      │
-│                                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
-│  │ Traefik  │  │ Platform │  │    Agent      │  │
-│  │ (proxy)  │  │   API    │  │ (Claude Code) │  │
-│  │ SSL/HTTP │  │ (Docker  │  │ + pleng CLI   │  │
-│  │ routing  │  │  engine) │  │              │  │
-│  └──────────┘  └──────────┘  └──────────────┘  │
-│                                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
-│  │ Telegram │  │Analytics │  │  Dashboard   │  │
-│  │   Bot    │  │(tracking)│  │   (React)    │  │
-│  └──────────┘  └──────────┘  └──────────────┘  │
-│                                                  │
-│  + your deployed apps (each = docker compose)    │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                      Your VPS                        │
+│                                                      │
+│  ┌──────────┐  ┌─────────────┐  ┌───────────────┐  │
+│  │ Traefik  │  │ Platform    │  │    Agent       │  │
+│  │ (proxy)  │  │ API         │  │ (Claude Code)  │  │
+│  │ SSL/HTTP │  │ Docker sock │  │ pleng CLI      │  │
+│  │ sslip.io │  │ SQLite      │  │ /projects vol  │  │
+│  └──────────┘  └─────────────┘  └───────────────┘  │
+│       ▲              ▲                  │            │
+│       │         ┌────┘──────────────────┘            │
+│       │         │  HTTP (internal network)            │
+│  ┌──────────┐  ┌─────────────┐  ┌───────────────┐  │
+│  │ Telegram │  │ Analytics   │  │  Dashboard    │  │
+│  │ Bot      │  │ (tracking)  │  │  (React)      │  │
+│  └──────────┘  └─────────────┘  └───────────────┘  │
+│                                                      │
+│  + your deployed apps (each in its own containers)   │
+└─────────────────────────────────────────────────────┘
 ```
 
-**6 containers. One `docker compose up`. That's the entire product.**
+**6 containers. One `docker compose up`.**
 
-| Container | Tech | What it does |
+| Container | Tech | Role |
 |---|---|---|
-| **traefik** | Traefik v3 | Reverse proxy. sslip.io for staging, Let's Encrypt for production |
-| **platform-api** | Python FastAPI + SQLite | Orchestrates Docker. REST API. Owns all state. Serves skill.md |
-| **agent** | Claude Code + Flask | AI brain. Writes code, calls platform-api via `pleng` CLI |
-| **telegram-bot** | python-telegram-bot | Bridges Telegram messages ↔ agent |
-| **analytics** | Python FastAPI + SQLite | Pageview collector. <1KB tracking script. API-first |
-| **dashboard** | React + nginx | Web UI. Proxies API calls to platform-api and analytics |
+| **traefik** | Traefik v3 | Reverse proxy. sslip.io staging, Let's Encrypt production |
+| **platform-api** | FastAPI + SQLite | Orchestrates Docker. REST API. State. Auth. skill.md |
+| **agent** | Claude Code + Flask | AI brain. Writes code + calls `pleng` CLI to deploy |
+| **telegram-bot** | python-telegram-bot | Thin bridge: Telegram ↔ agent |
+| **analytics** | FastAPI + SQLite | Pageview tracking. <1KB script. API-first |
+| **dashboard** | React + nginx | Read-only web panel. Static files only |
 
 ### Key design decisions
 
-- **Agent is isolated.** It has a shared `/projects` volume but does NOT have Docker socket access. It calls platform-api over HTTP to deploy. If the agent breaks, your infra keeps running.
-- **sslip.io for staging.** No DNS config needed. `anything.YOUR-IP.sslip.io` resolves to your IP. Free, instant.
-- **Platform-api owns Docker.** Single point of control. Everything goes through its REST API.
-- **SQLite, not Postgres/MongoDB.** Zero extra containers. Good enough for single-VPS scale.
-- **Analytics is API-first.** Unlike Plausible CE, you can programmatically create tracked sites.
+- **Agent is isolated.** Shared `/projects` volume but NO Docker socket. Calls platform-api over HTTP. If the agent breaks, your infra keeps running.
+- **sslip.io for staging.** `anything.YOUR-IP.sslip.io` resolves to your IP. No DNS config. Free. Instant.
+- **Platform-api owns Docker.** Single point of control. All deploy/stop/restart goes through its REST API.
+- **SQLite, not Postgres/MongoDB.** Zero extra containers. One file. Good enough for single-VPS scale.
+- **API key auto-generated.** Created on first boot, printed to logs. Internal services fetch it automatically. External access requires the key.
+- **Dashboard is read-only.** No deploy buttons. All operations via agent (Telegram/terminal). The dashboard is for monitoring, not control.
+
+### Auth model
+
+```
+External (internet)  →  needs X-API-Key header
+Internal (containers) →  no auth (Docker internal network)
+Dashboard login      →  password (WEB_UI_PASSWORD) → returns API key
+skill.md             →  public (documents the API, tells agents to use the key)
+```
 
 ## Configuration
 
@@ -166,69 +219,124 @@ The skill.md is auto-generated with the correct API URLs for your instance. Any 
 |---|---|
 | `ANTHROPIC_API_KEY` | For Claude Code (the AI agent) |
 | `TELEGRAM_BOT_TOKEN` | From @BotFather |
-| `TELEGRAM_CHAT_ID` | Your chat ID |
-| `PUBLIC_IP` | Your VPS public IP (for sslip.io subdomains) |
+| `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
+| `PUBLIC_IP` | Your VPS public IP (`curl ifconfig.me` to find it) |
 
 ### Optional
 
 | Variable | Default | Description |
 |---|---|---|
-| `BASE_DOMAIN` | — | Custom domain for the panel (enables HTTPS) |
-| `ACME_EMAIL` | admin@example.com | Let's Encrypt email |
-| `MODEL_NAME` | claude-sonnet-4-20250514 | Claude model |
-| `GITHUB_TOKEN` | — | For private repo deploys |
-| `WEB_UI_PASSWORD` | admin | Dashboard password |
+| `BASE_DOMAIN` | — | Custom domain for the panel (enables HTTPS for panel) |
+| `ACME_EMAIL` | admin@example.com | Email for Let's Encrypt certificates |
+| `MODEL_NAME` | claude-sonnet-4-20250514 | Claude model for the agent |
+| `GITHUB_TOKEN` | — | For deploying from private repos |
+| `WEB_UI_PASSWORD` | admin | Dashboard login password |
+
+## The `pleng` CLI
+
+Inside the agent container, Claude Code has a `pleng` CLI tool that talks to platform-api:
+
+```bash
+pleng sites                              # List all sites
+pleng deploy /projects/app --name app    # Deploy from path
+pleng deploy-git https://github.com/... --name app  # Deploy from git
+pleng logs my-app                        # Docker logs
+pleng status my-app                      # Container status
+pleng stop my-app                        # Stop
+pleng restart my-app                     # Restart
+pleng remove my-app                      # Remove (containers + files)
+pleng promote my-app --domain x.com      # Staging → production + SSL
+pleng chat                               # Interactive terminal mode
+```
+
+Claude Code decides which commands to run based on what you ask in natural language.
+
+## External agent integration (skill.md)
+
+Any AI agent that can read HTTP and make API calls can deploy to your Pleng:
+
+```bash
+# From your local Claude Code:
+curl http://panel.YOUR-IP.sslip.io/skill.md
+```
+
+The skill.md documents all endpoints:
+
+```
+POST /api/deploy/git      — deploy from git repo
+POST /api/deploy/upload   — deploy by uploading a tar.gz
+GET  /api/sites           — list sites
+GET  /api/sites/{id}/logs — Docker logs
+POST /api/sites/{id}/stop — stop
+POST /api/sites/{id}/promote — staging → production
+```
+
+All endpoints require `X-API-Key` header (get the key from `docker compose logs platform-api`).
 
 ## Project structure
 
 ```
 pleng/
 ├── docker-compose.yml           # THE PRODUCT — 6 services
-├── .env.example                 # 4 required vars
+├── .env.example                 # 4 required env vars
 ├── Makefile                     # up, down, logs, chat, ps
+├── LICENSE                      # AGPL-3.0
 │
 ├── platform-api/                # Docker orchestrator
-│   ├── app.py                   # FastAPI routes + skill.md
-│   ├── deployer.py              # Docker deploy engine
-│   └── database.py              # SQLite state
+│   ├── Dockerfile               # Multi-stage: docker:27-cli + python:3.12
+│   ├── app.py                   # FastAPI — routes, auth, skill.md
+│   ├── deployer.py              # Deploy engine — compose up, Traefik labels, promote
+│   └── database.py              # SQLite — sites, logs, settings, API key
 │
-├── agent/                       # AI brain
-│   ├── server.py                # HTTP server → Claude Code
-│   ├── workspace/CLAUDE.md      # Agent system prompt
-│   └── tools/pleng.py           # CLI: deploy, logs, stop, promote...
+├── agent/                       # AI brain (isolated — no Docker socket)
+│   ├── Dockerfile               # python + node + claude-code + pleng CLI
+│   ├── server.py                # Flask HTTP — receives messages, runs Claude Code
+│   ├── entrypoint.sh            # Copies CLAUDE.md to /projects
+│   ├── workspace/CLAUDE.md      # System prompt — tells Claude Code about pleng CLI
+│   └── tools/pleng.py           # CLI tool — deploy, logs, stop, promote, chat
 │
-├── telegram-bot/
-│   └── bot.py                   # Telegram ↔ agent bridge
+├── telegram-bot/                # Thin bridge
+│   ├── Dockerfile
+│   └── bot.py                   # Telegram ↔ agent HTTP, /sites command
 │
-├── analytics/
-│   ├── app.py                   # Collector + stats API
+├── analytics/                   # Built-in tracking
+│   ├── Dockerfile
+│   ├── app.py                   # FastAPI — collector + stats API
 │   └── static/t.js              # Tracking script (<1KB)
 │
-└── dashboard/
-    ├── nginx.conf               # Reverse proxy to API services
-    └── src/pages/               # Dashboard, Deploy, Sites, Detail
+└── dashboard/                   # Read-only web panel
+    ├── Dockerfile               # Multi-stage: node build + nginx
+    ├── nginx.conf               # Static files only (API via Traefik)
+    └── src/
+        ├── App.tsx              # Login + sidebar + routes
+        └── pages/
+            ├── LoginPage.tsx    # Password → API key
+            ├── Dashboard.tsx    # Sites overview (auto-refresh)
+            ├── SitesPage.tsx    # Site cards grid
+            └── SiteDetailPage.tsx  # Logs, build-log, promote
 ```
 
 ## Roadmap
 
 ### Phase 1: Core — Done
-- [x] Platform API (Docker deploy engine)
-- [x] Traefik + sslip.io staging + Let's Encrypt production
-- [x] Agent container with Claude Code + pleng CLI
+- [x] Platform API — deploy, stop, restart, remove, logs, promote
+- [x] Traefik — sslip.io staging, Let's Encrypt production
+- [x] Agent — Claude Code in container with `pleng` CLI
 - [x] Telegram bot
-- [x] Dashboard with deploy/sites/detail pages
-- [x] Built-in analytics
-- [x] skill.md for external agents
-- [x] Staging → production promotion
+- [x] Dashboard — read-only, password-protected
+- [x] Analytics — built-in pageview tracking
+- [x] skill.md — auto-generated, for external agents
+- [x] Auth — API key auto-generated, internal/external split
+- [x] Upload endpoint — deploy without git
 
 ### Phase 2: Operations
-- [ ] Health checks + auto-restart crashed containers
-- [ ] Telegram alerts (site down, disk full)
-- [ ] Resource monitoring (CPU/RAM/disk per container)
+- [ ] Health checks — auto-restart crashed containers
+- [ ] Telegram alerts — site down, disk full, OOM
+- [ ] Resource monitoring — CPU/RAM/disk per container
 - [ ] Weekly summary reports via Telegram
 
 ### Phase 3: CI/CD
-- [ ] Git webhook for auto-deploy on push
+- [ ] Git webhook — auto-deploy on push
 - [ ] Rollback to previous version
 - [ ] Zero-downtime deploys
 
@@ -237,7 +345,7 @@ pleng/
 - [ ] Backup and restore
 - [ ] Environment cloning (staging → prod)
 
-## Why "Pleng"?
+## Comparison
 
 | | Coolify | Dokploy | Railway | **Pleng** |
 |---|---|---|---|---|
@@ -245,15 +353,16 @@ pleng/
 | AI agent | No | No | No | **Yes** |
 | Natural language | No | No | No | **Yes** |
 | Telegram | No | No | No | **Yes** |
-| skill.md / MCP | No | Partial | No | **Yes** |
-| Analytics built-in | No | No | No | **Yes** |
-| Staging subdomains | Manual | Manual | Auto | **Auto (sslip.io)** |
+| skill.md for agents | No | No | No | **Yes** |
+| Built-in analytics | No | No | No | **Yes** |
+| Free staging URLs | No | No | Auto | **Auto (sslip.io)** |
 | Setup | Complex | Medium | Cloud | **`docker compose up`** |
 | Price | Free | Free | $5-20/mo | **Free** |
+| License | AGPL-3.0 | Apache 2.0 | Closed | **AGPL-3.0** |
 
 ## License
 
-AGPL-3.0 — same as Coolify. You can self-host freely. If you modify the code and offer it as a service, you must open-source your changes. See [LICENSE](LICENSE).
+AGPL-3.0 — same license as Coolify. Self-host freely. If you modify the code and offer it as a service, you must open-source your changes. See [LICENSE](LICENSE).
 
 ---
 
