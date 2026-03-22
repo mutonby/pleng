@@ -28,9 +28,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger("telegram-bot")
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+ALLOWED_CHAT_IDS = set(os.environ.get("TELEGRAM_CHAT_ID", "").split(","))
 AGENT_URL = os.environ.get("AGENT_URL", "http://agent:8000")
 PLATFORM_URL = os.environ.get("PLATFORM_API_URL", "http://platform-api:8000")
+
+
+def _is_allowed(update: Update) -> bool:
+    """Only allow messages from configured chat IDs."""
+    chat_id = str(update.effective_chat.id)
+    if chat_id not in ALLOWED_CHAT_IDS:
+        logger.warning(f"Blocked message from unauthorized chat: {chat_id}")
+        return False
+    return True
 
 
 # ── Markdown → Telegram HTML ────────────────────────────
@@ -73,6 +82,9 @@ def md_to_tg(text: str) -> str:
 # ── Commands ────────────────────────────────────────────
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update):
+        await update.message.reply_text("Unauthorized.")
+        return
     await update.message.reply_text(
         "<b>Pleng</b> — Your AI Platform Engineer\n\n"
         "Tell me what you need:\n"
@@ -87,6 +99,8 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_new(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update):
+        return
     chat_id = str(update.effective_chat.id)
     try:
         requests.post(f"{AGENT_URL}/chat/reset", json={"session_id": chat_id}, timeout=5)
@@ -96,6 +110,8 @@ async def cmd_new(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_sites(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update):
+        return
     try:
         sites = requests.get(f"{PLATFORM_URL}/api/sites", timeout=10).json()
     except Exception as e:
@@ -119,6 +135,8 @@ async def cmd_sites(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update):
+        return
     await update.message.reply_text(
         "<b>Pleng — Your AI Platform Engineer</b>\n\n"
         "<b>Commands:</b>\n"
@@ -138,6 +156,8 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ── Message handler ─────────────────────────────────────
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update):
+        return
     chat_id = str(update.effective_chat.id)
     text = update.message.text or update.message.caption or ""
     if not text:
