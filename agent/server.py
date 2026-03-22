@@ -101,9 +101,13 @@ def _run_claude(message: str, resume_session: str = None) -> tuple[str, str | No
     env["CLAUDE_CODE_NON_INTERACTIVE"] = "true"
     env["CLAUDE_CODE_ACCEPT_TOS"] = "true"
 
-    if env.get("ANTHROPIC_API_KEY"):
+    # Auth: API key or OAuth
+    auth_mode = os.environ.get("CLAUDE_AUTH_MODE", "oauth")
+    if auth_mode == "api_key" and env.get("ANTHROPIC_API_KEY"):
         env["HOME"] = "/tmp"
     else:
+        # OAuth mode — use claude user's home with .claude.json
+        env.pop("ANTHROPIC_API_KEY", None)
         env["HOME"] = "/home/claude"
 
     cmd = [

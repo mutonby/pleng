@@ -62,12 +62,15 @@ services:
     build: ./agent
     restart: unless-stopped
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_AUTH_MODE=${CLAUDE_AUTH_MODE:-oauth}
       - MODEL_NAME=${MODEL_NAME:-claude-sonnet-4-20250514}
       - PLATFORM_API_URL=http://platform-api:8000
       - PROJECTS_DIR=/projects
     volumes:
       - projects:/projects
+      - ~/.claude:/home/claude/.claude
+      - ~/.claude.json:/tmp/.claude.json.host:ro
     networks:
       - internal
     depends_on:
