@@ -335,21 +335,20 @@ def _inject_traefik_labels(compose_file: str, name: str, domain: str):
         svc.pop("ports", None)
 
         router = name.replace("-", "").replace("_", "").replace(".", "")
-        labels = svc.get("labels", [])
-        if isinstance(labels, dict):
-            labels = [f"{k}={v}" for k, v in labels.items()]
 
-        traefik_labels = [
+        # Remove ALL existing traefik labels (clean slate)
+        old_labels = svc.get("labels", [])
+        if isinstance(old_labels, dict):
+            old_labels = [f"{k}={v}" for k, v in old_labels.items()]
+        labels = [l for l in old_labels if not l.startswith("traefik.")]
+
+        # Add fresh traefik labels
+        labels.extend([
             "traefik.enable=true",
             f"traefik.http.routers.{router}.rule=Host(`{domain}`)",
             f"traefik.http.routers.{router}.entrypoints=web",
             f"traefik.http.services.{router}.loadbalancer.server.port={internal_port}",
-        ]
-
-        existing = {l.split("=")[0] for l in labels if "=" in l}
-        for l in traefik_labels:
-            if l.split("=")[0] not in existing:
-                labels.append(l)
+        ])
 
         svc["labels"] = labels
 
