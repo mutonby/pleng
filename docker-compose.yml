@@ -33,12 +33,11 @@ services:
       - BASE_DOMAIN=${BASE_DOMAIN:-}
       - WEB_UI_PASSWORD=${WEB_UI_PASSWORD:-admin}
       - DATABASE_PATH=/data/pleng.db
-      - PROJECTS_DIR=/projects
-      - PROJECTS_HOST_DIR=${PROJECTS_PATH:-/opt/pleng/projects}
+      - PROJECTS_DIR=${PROJECTS_PATH:-/opt/pleng/projects}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${PROJECTS_PATH:-/opt/pleng/projects}:/projects
+      - ${PROJECTS_PATH:-/opt/pleng/projects}:${PROJECTS_PATH:-/opt/pleng/projects}
       - platform_data:/data
     networks:
       - web
@@ -67,9 +66,9 @@ services:
       - CLAUDE_AUTH_MODE=${CLAUDE_AUTH_MODE:-oauth}
       - MODEL_NAME=${MODEL_NAME:-claude-sonnet-4-20250514}
       - PLATFORM_API_URL=http://platform-api:8000
-      - PROJECTS_DIR=/projects
+      - PROJECTS_DIR=${PROJECTS_PATH:-/opt/pleng/projects}
     volumes:
-      - ${PROJECTS_PATH:-/opt/pleng/projects}:/projects
+      - ${PROJECTS_PATH:-/opt/pleng/projects}:${PROJECTS_PATH:-/opt/pleng/projects}
       - ~/.claude:/home/claude/.claude
       - ~/.claude.json:/tmp/.claude.json.host:ro
     networks:

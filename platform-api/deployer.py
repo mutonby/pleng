@@ -17,19 +17,10 @@ import database as db
 
 logger = logging.getLogger(__name__)
 
-PROJECTS_DIR = os.environ.get("PROJECTS_DIR", "/projects")
-# Host path for Docker daemon context (volumes are at different path on host vs container)
-PROJECTS_HOST_DIR = os.environ.get("PROJECTS_HOST_DIR", "")
+PROJECTS_DIR = os.environ.get("PROJECTS_DIR", "/opt/pleng/projects")
 PUBLIC_IP = os.environ.get("PUBLIC_IP", "127.0.0.1")
 BASE_DOMAIN = os.environ.get("BASE_DOMAIN", "")
 NETWORK = "pleng_web"
-
-
-def _host_path(container_path: str) -> str:
-    """Convert container path to host path for Docker daemon."""
-    if PROJECTS_HOST_DIR and container_path.startswith(PROJECTS_DIR):
-        return container_path.replace(PROJECTS_DIR, PROJECTS_HOST_DIR, 1)
-    return container_path
 
 
 def staging_domain(name: str) -> str:
@@ -279,14 +270,11 @@ def _deploy(site_id: str, name: str, workspace: str) -> dict:
 
 
 def _rewrite_build_contexts(compose_file: str, workspace: str):
-    """Rewrite 'build: .' to absolute host paths so Docker daemon can find the files.
+    """Rewrite relative build contexts (e.g. 'build: .') to absolute paths.
 
-    Docker CLI runs inside the container but Docker daemon runs on the host.
-    Relative build contexts resolve to container paths, which the daemon can't see.
+    Container and host share the same mount path, so absolute paths work for both
+    the Docker CLI (in container) and the Docker daemon (on host).
     """
-    if not PROJECTS_HOST_DIR:
-        return  # No host path mapping configured
-
     try:
         with open(compose_file) as f:
             compose = yaml.safe_load(f)
@@ -294,29 +282,28 @@ def _rewrite_build_contexts(compose_file: str, workspace: str):
         if not compose or "services" not in compose:
             return
 
-        host_workspace = _host_path(workspace)
         changed = False
-
         for svc_name, svc in compose.get("services", {}).items():
             build = svc.get("build")
             if build is None:
                 continue
 
             if isinstance(build, str):
-                # build: . or build: ./subdir
-                if build == "." or build == "./":
-                    svc["build"] = host_workspace
+                if build in (".", "./"):
+                    svc["build"] = workspace
+                    changed = True
                 elif build.startswith("./"):
-                    svc["build"] = os.path.join(host_workspace, build[2:])
-                changed = True
+                    svc["build"] = os.path.join(workspace, build[2:])
+                    changed = True
 
             elif isinstance(build, dict):
                 ctx = build.get("context", ".")
-                if ctx == "." or ctx == "./":
-                    build["context"] = host_workspace
+                if ctx in (".", "./"):
+                    build["context"] = workspace
+                    changed = True
                 elif ctx.startswith("./"):
-                    build["context"] = os.path.join(host_workspace, ctx[2:])
-                changed = True
+                    build["context"] = os.path.join(workspace, ctx[2:])
+                    changed = True
 
         if changed:
             with open(compose_file, "w") as f:

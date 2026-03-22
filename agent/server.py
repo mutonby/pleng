@@ -23,7 +23,7 @@ app = Flask(__name__)
 _sessions: dict[str, str] = {}
 _lock = threading.Lock()
 
-WORKSPACE = "/projects"
+WORKSPACE = os.environ.get("PROJECTS_DIR", "/opt/pleng/projects")
 MODEL = os.environ.get("MODEL_NAME", "claude-sonnet-4-20250514")
 PLATFORM_API_URL = os.environ.get("PLATFORM_API_URL", "http://platform-api:8000")
 
