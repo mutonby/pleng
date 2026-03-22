@@ -81,6 +81,40 @@ def chat():
     return jsonify({"response": result_text, "session_id": new_session_id})
 
 
+@app.route("/chat/stream", methods=["POST"])
+def chat_stream():
+    """Streaming version — sends chunks as newline-delimited JSON."""
+    from flask import Response
+
+    data = request.get_json() or {}
+    message = data.get("message", "")
+    session_key = data.get("session_id", "default")
+
+    if not message:
+        return jsonify({"error": "message required"}), 400
+
+    logger.info(f"Stream [{session_key}]: {message[:80]}...")
+
+    with _lock:
+        resume_id = _sessions.get(session_key)
+
+    def generate():
+        result_text, session_id, error = _run_claude_streaming(message, resume_id)
+
+        if session_id:
+            with _lock:
+                _sessions[session_key] = session_id
+
+        if error and not result_text:
+            yield json.dumps({"chunk": f"Error: {error}", "done": True}) + "\n"
+        elif result_text:
+            yield json.dumps({"chunk": result_text, "done": True}) + "\n"
+        else:
+            yield json.dumps({"chunk": "No response.", "done": True}) + "\n"
+
+    return Response(generate(), mimetype="application/x-ndjson")
+
+
 @app.route("/chat/reset", methods=["POST"])
 def reset():
     data = request.get_json() or {}
@@ -178,6 +212,10 @@ def _run_claude(message: str, resume_session: str = None) -> tuple[str, str | No
         return "", None, "Claude Code timed out"
     except Exception as e:
         return "", None, str(e)
+
+
+# Streaming uses the same implementation — Claude Code outputs final result
+_run_claude_streaming = _run_claude
 
 
 if __name__ == "__main__":
