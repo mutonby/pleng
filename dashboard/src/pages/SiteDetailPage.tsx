@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { Play, Square, RefreshCw, Trash2, ExternalLink, ArrowUpCircle } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { ExternalLink, ArrowUpCircle, ArrowLeft, Box, Clock, HardDrive } from 'lucide-react'
 import { api } from '../lib/api'
 import { statusColors, cn, formatDate } from '../lib/utils'
 
@@ -9,18 +9,29 @@ export default function SiteDetailPage() {
   const [site, setSite] = useState<any>(null)
   const [logs, setLogs] = useState('')
   const [buildLogs, setBuildLogs] = useState<any[]>([])
+  const [containers, setContainers] = useState<any[]>([])
   const [tab, setTab] = useState('overview')
-  const [loading, setLoading] = useState('')
   const [promoteDomain, setPromoteDomain] = useState('')
+  const [promoting, setPromoting] = useState(false)
 
-  useEffect(() => {
+  const refreshSite = useCallback(() => {
     if (!id) return
     api.get(`/sites/${id}`).then(setSite).catch(() => {})
+    api.get(`/sites/${id}/containers`).then(d => setContainers(Array.isArray(d) ? d : [])).catch(() => {})
   }, [id])
 
   useEffect(() => {
+    refreshSite()
+    const interval = setInterval(refreshSite, 8000)
+    return () => clearInterval(interval)
+  }, [refreshSite])
+
+  useEffect(() => {
     if (!id || tab !== 'logs') return
-    api.get(`/sites/${id}/logs?lines=200`).then(d => setLogs(d.logs || '')).catch(() => {})
+    const fetchLogs = () => api.get(`/sites/${id}/logs?lines=200`).then(d => setLogs(d.logs || '')).catch(() => {})
+    fetchLogs()
+    const interval = setInterval(fetchLogs, 5000)
+    return () => clearInterval(interval)
   }, [id, tab])
 
   useEffect(() => {
@@ -28,22 +39,12 @@ export default function SiteDetailPage() {
     api.get(`/sites/${id}/build-logs`).then(d => setBuildLogs(Array.isArray(d) ? d : [])).catch(() => {})
   }, [id, tab])
 
-  async function action(act: string) {
-    if (!id) return
-    setLoading(act)
-    await api.post(`/sites/${id}/${act}`)
-    const updated = await api.get(`/sites/${id}`)
-    setSite(updated)
-    setLoading('')
-  }
-
   async function promote() {
     if (!id || !promoteDomain.trim()) return
-    setLoading('promote')
+    setPromoting(true)
     await api.post(`/sites/${id}/promote`, { domain: promoteDomain.trim() })
-    const updated = await api.get(`/sites/${id}`)
-    setSite(updated)
-    setLoading('')
+    refreshSite()
+    setPromoting(false)
     setPromoteDomain('')
   }
 
@@ -54,77 +55,94 @@ export default function SiteDetailPage() {
 
   return (
     <div className="space-y-4">
+      {/* Back + Header */}
+      <Link to="/sites" className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1">
+        <ArrowLeft size={14} /> Back to sites
+      </Link>
+
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">{site.name}</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold">{site.name}</h2>
+            <span className={cn('text-xs px-3 py-1 rounded-full', statusColors[site.status] || 'bg-gray-600')}>
+              {site.status}
+            </span>
+          </div>
           {url && (
-            <a href={url} target="_blank" rel="noreferrer" className="text-sm text-primary-400 hover:underline flex items-center gap-1">
+            <a href={url} target="_blank" rel="noreferrer" className="text-sm text-primary-400 hover:underline flex items-center gap-1 mt-1">
               <ExternalLink size={14} /> {domain}
             </a>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className={cn('text-xs px-3 py-1 rounded-full', statusColors[site.status] || 'bg-gray-600')}>
-            {site.status}
-          </span>
-          {['staging', 'production'].includes(site.status) && (
-            <button onClick={() => action('stop')} disabled={!!loading}
-              className="flex items-center gap-1 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-xs">
-              <Square size={14} /> Stop
-            </button>
-          )}
-          {site.status === 'stopped' && (
-            <button onClick={() => action('restart')} disabled={!!loading}
-              className="flex items-center gap-1 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg text-xs">
-              <Play size={14} /> Start
-            </button>
-          )}
-          <button onClick={() => action('restart')} disabled={!!loading}
-            className="flex items-center gap-1 px-3 py-1.5 bg-surface-900/50 hover:bg-surface-900 rounded-lg text-xs">
-            <RefreshCw size={14} /> Restart
-          </button>
-        </div>
       </div>
 
+      {/* Containers status */}
+      {containers.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {containers.map((c: any, i: number) => (
+            <div key={i} className="bg-surface-800 rounded-lg p-3 border border-gray-700/50">
+              <div className="flex items-center gap-2 mb-2">
+                <Box size={14} className={c.State === 'running' ? 'text-green-400' : 'text-red-400'} />
+                <span className="text-sm font-medium">{c.Name || c.Service || '?'}</span>
+              </div>
+              <div className="space-y-1 text-xs text-gray-500">
+                <div className="flex items-center gap-1">
+                  <span className={cn('w-1.5 h-1.5 rounded-full', c.State === 'running' ? 'bg-green-400' : 'bg-red-400')} />
+                  {c.State || '?'}
+                </div>
+                {c.Image && <div className="flex items-center gap-1"><HardDrive size={10} /> {c.Image}</div>}
+                {c.Status && <div className="flex items-center gap-1"><Clock size={10} /> {c.Status}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tabs */}
       <div className="flex gap-1 bg-surface-800 rounded-lg p-1">
         {['overview', 'logs', 'build-log'].map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={cn('px-3 py-1.5 rounded-md text-xs capitalize transition-colors',
               tab === t ? 'bg-primary-600 text-white' : 'text-gray-400 hover:text-gray-200')}>
-            {t.replace('-', ' ')}
+            {t === 'logs' ? 'Docker Logs' : t === 'build-log' ? 'Build Log' : 'Overview'}
           </button>
         ))}
       </div>
 
       {tab === 'overview' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Info label="Status" value={site.status} />
             <Info label="Mode" value={site.deploy_mode} />
+            <Info label="Created" value={formatDate(site.created_at)} />
+            <Info label="Last deploy" value={formatDate(site.deployed_at)} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <Info label="Staging URL" value={site.staging_domain ? `http://${site.staging_domain}` : '-'} link={site.staging_domain ? `http://${site.staging_domain}` : undefined} />
             <Info label="Production URL" value={site.production_domain ? `https://${site.production_domain}` : '-'} link={site.production_domain ? `https://${site.production_domain}` : undefined} />
-            <Info label="GitHub" value={site.github_url || '-'} link={site.github_url} />
-            <Info label="Created" value={formatDate(site.created_at)} />
-            <Info label="Deployed" value={formatDate(site.deployed_at)} />
-            <Info label="AI Cost" value={`$${(site.ai_cost || 0).toFixed(2)}`} />
           </div>
+
+          {site.github_url && (
+            <Info label="Repository" value={site.github_url} link={site.github_url} />
+          )}
 
           {/* Promote section */}
           {site.status === 'staging' && (
-            <div className="bg-surface-800 rounded-xl p-4 border border-gray-700/50">
+            <div className="bg-surface-800 rounded-xl p-4 border border-green-500/20">
               <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                 <ArrowUpCircle size={16} className="text-green-400" /> Promote to Production
               </h4>
-              <p className="text-xs text-gray-500 mb-3">Add a custom domain with automatic SSL (Let's Encrypt).</p>
+              <p className="text-xs text-gray-500 mb-3">Add a custom domain. SSL certificate via Let's Encrypt.</p>
               <div className="flex gap-2">
                 <input
                   type="text" value={promoteDomain} onChange={e => setPromoteDomain(e.target.value)}
                   placeholder="app.example.com"
-                  className="flex-1 px-3 py-2 bg-surface-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-primary-500"
+                  className="flex-1 px-3 py-2 bg-surface-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-green-500"
                 />
-                <button onClick={promote} disabled={!!loading || !promoteDomain.trim()}
+                <button onClick={promote} disabled={promoting || !promoteDomain.trim()}
                   className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 rounded-lg text-sm transition-colors">
-                  {loading === 'promote' ? '...' : 'Promote'}
+                  {promoting ? '...' : 'Promote'}
                 </button>
               </div>
             </div>
@@ -135,25 +153,24 @@ export default function SiteDetailPage() {
       {tab === 'logs' && (
         <div className="bg-surface-800 rounded-xl border border-gray-700/50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700/50">
-            <span className="text-xs text-gray-500">Docker Logs</span>
-            <button onClick={() => api.get(`/sites/${id}/logs?lines=200`).then(d => setLogs(d.logs || ''))}
-              className="text-xs text-primary-400 hover:underline">Refresh</button>
+            <span className="text-xs text-gray-500">Docker Logs (auto-refresh 5s)</span>
           </div>
-          <pre className="p-4 text-xs font-mono text-gray-400 overflow-auto max-h-[600px] whitespace-pre-wrap">
-            {logs || 'No logs'}
+          <pre className="p-4 text-xs font-mono text-gray-400 overflow-auto max-h-[600px] whitespace-pre-wrap leading-relaxed">
+            {logs || 'No logs available'}
           </pre>
         </div>
       )}
 
       {tab === 'build-log' && (
-        <div className="bg-surface-800 rounded-xl p-4 border border-gray-700/50 max-h-96 overflow-auto">
+        <div className="bg-surface-800 rounded-xl p-4 border border-gray-700/50 max-h-[500px] overflow-auto">
           {buildLogs.length === 0 ? (
             <p className="text-gray-500 text-sm">No build logs</p>
           ) : (
             <div className="space-y-1 font-mono text-xs">
               {buildLogs.map((l: any) => (
                 <div key={l.id} className={cn('py-0.5', l.level === 'error' ? 'text-red-400' : 'text-gray-400')}>
-                  <span className="text-gray-600">{l.created_at?.slice(11, 19)}</span> {l.message}
+                  <span className="text-gray-600 mr-2">{l.created_at?.slice(11, 19)}</span>
+                  {l.message}
                 </div>
               ))}
             </div>

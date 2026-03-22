@@ -142,6 +142,14 @@ def cmd_status(args: list[str]):
             print(f"  {c.get('Name', '?')}: {c.get('State', '?')}")
 
 
+def cmd_redeploy(args: list[str]):
+    name = args[0] if args else ""
+    if not name:
+        print("Error: pleng redeploy <name>"); sys.exit(1)
+    result = _post(f"/api/sites/{name}/redeploy")
+    _print_result(result)
+
+
 def cmd_stop(args: list[str]):
     name = args[0] if args else ""
     if not name:
@@ -257,6 +265,7 @@ def main():
         "sites": lambda: cmd_sites(),
         "deploy": lambda: cmd_deploy(rest),
         "deploy-git": lambda: cmd_deploy_git(rest),
+        "redeploy": lambda: cmd_redeploy(rest),
         "logs": lambda: cmd_logs(rest),
         "status": lambda: cmd_status(rest),
         "stop": lambda: cmd_stop(rest),

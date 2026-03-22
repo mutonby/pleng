@@ -42,6 +42,12 @@ def _fetch_api_key():
             if r.status_code == 200:
                 _platform_api_key = r.json().get("api_key", "")
                 logger.info(f"Got API key from platform-api: {_platform_api_key[:12]}...")
+                # Write to claude's bashrc so bash subprocesses have it
+                try:
+                    with open("/home/claude/.bashrc", "a") as f:
+                        f.write(f'\nexport PLENG_API_KEY="{_platform_api_key}"\n')
+                except Exception:
+                    pass
                 return
         except Exception:
             pass

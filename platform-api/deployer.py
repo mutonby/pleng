@@ -91,6 +91,43 @@ def stop(site_id: str) -> bool:
     return False
 
 
+def redeploy(site_id: str) -> dict:
+    """Rebuild and restart a site. Keeps the same domain."""
+    site = db.get_site(site_id)
+    if not site:
+        return {"error": "Site not found"}
+
+    project = f"pleng-{site['name']}"
+    workspace = site.get("project_path") or os.path.join(PROJECTS_DIR, site_id)
+    compose_file = os.path.join(workspace, "docker-compose.yml")
+
+    if not os.path.exists(compose_file):
+        return {"error": f"No docker-compose.yml in {workspace}"}
+
+    db.add_site_log(site_id, "Redeploying (rebuild)...")
+
+    # Rewrite build contexts in case compose was reset
+    _rewrite_build_contexts(compose_file, workspace)
+
+    result = subprocess.run(
+        _compose_cmd(project, workspace, "up", "-d", "--build", "--force-recreate"),
+        capture_output=True, text=True, timeout=300,
+    )
+
+    if result.returncode != 0:
+        error = result.stderr[:500]
+        db.add_site_log(site_id, f"Redeploy failed: {error}", level="error")
+        return {"error": error}
+
+    _connect_network(project)
+    db.update_site(site_id, deployed_at=datetime.utcnow().isoformat())
+    db.add_site_log(site_id, "Redeployed successfully")
+
+    domain = site.get("production_domain") or site.get("staging_domain") or ""
+    url = f"https://{domain}" if site.get("production_domain") else f"http://{domain}"
+    return {"site_id": site_id, "name": site["name"], "status": site["status"], "url": url}
+
+
 def restart(site_id: str) -> bool:
     site = db.get_site(site_id)
     if not site:

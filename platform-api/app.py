@@ -230,6 +230,18 @@ def api_get_site(site_id: str):
     return site
 
 
+@app.post("/api/sites/{site_id}/redeploy")
+def api_redeploy(site_id: str):
+    """Rebuild and restart a site."""
+    site = db.get_site(site_id) or db.get_site_by_name(site_id)
+    if not site:
+        raise HTTPException(404)
+    result = deployer.redeploy(site["id"])
+    if "error" in result:
+        raise HTTPException(500, result["error"])
+    return result
+
+
 @app.post("/api/sites/{site_id}/stop")
 def api_stop(site_id: str):
     site = db.get_site(site_id) or db.get_site_by_name(site_id)
