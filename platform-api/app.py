@@ -317,71 +317,98 @@ def api_promote(site_id: str, body: PromoteSite):
 def skill_md():
     ip = os.environ.get("PUBLIC_IP", "127.0.0.1")
     base = f"http://panel.{ip}.sslip.io"
-    return f"""# Pleng — AI PaaS Skill
+    return f"""# Pleng — Your AI Platform Engineer
 
-Connect to this Pleng instance to deploy and manage web applications.
+This is a Pleng instance. You can use this API to deploy and manage web applications on this server.
 
-## Base URL
-{base}
+## Quick start
+
+To deploy a project from a git repo:
+```bash
+curl -X POST {base}/api/deploy/git \\
+  -H "X-API-Key: YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{{"name": "my-app", "repo_url": "https://github.com/user/repo"}}'
+```
+
+The response includes a staging URL like `http://xxxx.{ip}.sslip.io` where the app is immediately accessible.
 
 ## Authentication
-All requests need an API key. Pass it as a header:
-```
-X-API-Key: <your-api-key>
-```
-Get your API key from `docker compose logs platform-api` or from the dashboard.
 
-## Deploy from git repo
+Every request needs an API key in the header:
+```
+X-API-Key: YOUR_API_KEY
+```
+
+## Endpoints
+
+### Deploy
+
+**From git repo** (the repo must contain a docker-compose.yml or Dockerfile):
 ```
 POST {base}/api/deploy/git
-X-API-Key: <key>
 Body: {{"name": "my-app", "repo_url": "https://github.com/user/repo"}}
+Response: {{"site_id": "...", "status": "staging", "url": "http://xxxx.{ip}.sslip.io"}}
 ```
 
-## Deploy by uploading code (tar.gz)
+**By uploading a tar.gz** (must contain docker-compose.yml or Dockerfile):
 ```
 POST {base}/api/deploy/upload
-X-API-Key: <key>
 Content-Type: multipart/form-data
 Fields: name=my-app, file=@project.tar.gz
 ```
-To create the tarball: `tar -czf project.tar.gz -C /path/to/project .`
-The project MUST contain a docker-compose.yml (or at least a Dockerfile).
+Create the tarball: `tar -czf project.tar.gz -C /path/to/project .`
 
-## List all sites
-```
-GET {base}/api/sites
-X-API-Key: <key>
-```
+### Manage sites
 
-## Get site details
 ```
-GET {base}/api/sites/{{id_or_name}}
-```
-
-## Docker logs
-```
-GET {base}/api/sites/{{id}}/logs?lines=100
+GET  {base}/api/sites                        List all sites
+GET  {base}/api/sites/{{name_or_id}}           Get site details
+GET  {base}/api/sites/{{name_or_id}}/logs      Docker logs (?lines=100)
+GET  {base}/api/sites/{{name_or_id}}/containers Container status
+POST {base}/api/sites/{{name_or_id}}/redeploy  Rebuild and restart
+POST {base}/api/sites/{{name_or_id}}/stop      Stop containers
+POST {base}/api/sites/{{name_or_id}}/restart   Restart containers
+POST {base}/api/sites/{{name_or_id}}/remove    Remove site
 ```
 
-## Stop / Restart / Remove
-```
-POST {base}/api/sites/{{id}}/stop
-POST {base}/api/sites/{{id}}/restart
-POST {base}/api/sites/{{id}}/remove
-```
+### Promote to production
 
-## Promote staging → production (custom domain + HTTPS)
+When a staging site is ready, give it a custom domain with automatic HTTPS:
 ```
-POST {base}/api/sites/{{id}}/promote
+POST {base}/api/sites/{{name_or_id}}/promote
 Body: {{"domain": "app.example.com"}}
 ```
 
 ## How it works
+
 1. Every deploy starts as **staging** with a free URL: `http://{{hash}}.{ip}.sslip.io`
 2. No domain needed. No DNS config. Works instantly.
-3. When ready, **promote** to production with a custom domain → automatic HTTPS via Let's Encrypt.
-4. Stop, restart, or remove anytime.
+3. Promote to production → custom domain + HTTPS via Let's Encrypt.
+4. The user's docker-compose.yml is never modified. Pleng generates its own overlay.
+
+## Example: deploy, check, promote
+
+```bash
+API="{base}"
+KEY="YOUR_API_KEY"
+
+# Deploy
+curl -s -X POST $API/api/deploy/git \\
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \\
+  -d '{{"name": "my-app", "repo_url": "https://github.com/user/repo"}}'
+
+# Check status
+curl -s -H "X-API-Key: $KEY" $API/api/sites/my-app
+
+# View logs
+curl -s -H "X-API-Key: $KEY" $API/api/sites/my-app/logs
+
+# Promote to production
+curl -s -X POST $API/api/sites/my-app/promote \\
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \\
+  -d '{{"domain": "app.mydomain.com"}}'
+```
 """
 
 
