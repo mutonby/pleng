@@ -63,6 +63,10 @@ def startup():
     import monitor
     monitor.start()
 
+    # Start analytics parser (Traefik access logs)
+    import analytics
+    analytics.start()
+
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
@@ -306,6 +310,24 @@ def api_containers(site_id: str):
     if not site:
         raise HTTPException(404)
     return deployer.container_status(site["id"])
+
+
+@app.get("/api/sites/{site_id}/analytics")
+def api_site_analytics(site_id: str, period: str = "7d"):
+    """Traffic analytics for a site (from Traefik access logs)."""
+    site = db.get_site(site_id) or db.get_site_by_name(site_id)
+    if not site:
+        raise HTTPException(404)
+    domain = site.get("production_domain") or site.get("staging_domain") or ""
+    if not domain:
+        return {"stats": {}, "top_pages": [], "top_sources": [], "daily": []}
+    import analytics
+    return {
+        "stats": analytics.get_site_stats(domain, period),
+        "top_pages": analytics.get_top_pages(domain, period),
+        "top_sources": analytics.get_top_sources(domain, period),
+        "daily": analytics.get_daily_stats(domain, period),
+    }
 
 
 @app.get("/api/sites/{site_id}/build-logs")

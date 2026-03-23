@@ -47,6 +47,20 @@ def init():
             );
             CREATE INDEX IF NOT EXISTS idx_site_logs_site ON site_logs(site_id);
 
+            CREATE TABLE IF NOT EXISTS traffic (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain TEXT NOT NULL,
+                path TEXT NOT NULL,
+                visitor_hash TEXT NOT NULL,
+                status INTEGER DEFAULT 200,
+                duration_ms REAL DEFAULT 0,
+                referrer TEXT DEFAULT '',
+                date TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_traffic_domain_date ON traffic(domain, date);
+            CREATE INDEX IF NOT EXISTS idx_traffic_created ON traffic(created_at);
+
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL

@@ -10,6 +10,7 @@ export default function SiteDetailPage() {
   const [logs, setLogs] = useState('')
   const [buildLogs, setBuildLogs] = useState<any[]>([])
   const [containers, setContainers] = useState<any[]>([])
+  const [analytics, setAnalytics] = useState<any>(null)
   const [tab, setTab] = useState('overview')
   const [promoteDomain, setPromoteDomain] = useState('')
   const [promoting, setPromoting] = useState(false)
@@ -37,6 +38,11 @@ export default function SiteDetailPage() {
   useEffect(() => {
     if (!id || tab !== 'build-log') return
     api.get(`/sites/${id}/build-logs`).then(d => setBuildLogs(Array.isArray(d) ? d : [])).catch(() => {})
+  }, [id, tab])
+
+  useEffect(() => {
+    if (!id || tab !== 'analytics') return
+    api.get(`/sites/${id}/analytics?period=7d`).then(setAnalytics).catch(() => {})
   }, [id, tab])
 
   async function promote() {
@@ -102,11 +108,11 @@ export default function SiteDetailPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-surface-800 rounded-lg p-1">
-        {['overview', 'logs', 'build-log'].map(t => (
+        {['overview', 'analytics', 'logs', 'build-log'].map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={cn('px-3 py-1.5 rounded-md text-xs capitalize transition-colors',
               tab === t ? 'bg-primary-600 text-white' : 'text-gray-400 hover:text-gray-200')}>
-            {t === 'logs' ? 'Docker Logs' : t === 'build-log' ? 'Build Log' : 'Overview'}
+            {t === 'logs' ? 'Docker Logs' : t === 'build-log' ? 'Build Log' : t === 'analytics' ? 'Analytics' : 'Overview'}
           </button>
         ))}
       </div>
@@ -152,6 +158,68 @@ export default function SiteDetailPage() {
         </div>
       )}
 
+      {tab === 'analytics' && (
+        <div className="space-y-4">
+          {!analytics || !analytics.stats?.pageviews ? (
+            <div className="bg-surface-800 rounded-xl p-6 border border-gray-700/50 text-center">
+              <p className="text-gray-500 text-sm">No traffic data yet.</p>
+              <p className="text-gray-600 text-xs mt-1">Analytics are collected from Traefik access logs. Data appears after the site receives traffic.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <StatCard label="Pageviews" value={analytics.stats.pageviews.toLocaleString()} />
+                <StatCard label="Visitors" value={analytics.stats.visitors.toLocaleString()} />
+                <StatCard label="Avg Response" value={`${analytics.stats.avg_response_ms}ms`} />
+                <StatCard label="Errors (5xx)" value={analytics.stats.errors.toString()} color={analytics.stats.errors > 0 ? 'text-red-400' : undefined} />
+              </div>
+
+              {analytics.top_pages?.length > 0 && (
+                <div className="bg-surface-800 rounded-xl p-4 border border-gray-700/50">
+                  <h4 className="text-sm font-medium mb-3">Top Pages</h4>
+                  <div className="space-y-1">
+                    {analytics.top_pages.map((p: any) => (
+                      <div key={p.path} className="flex justify-between text-xs p-2 bg-surface-900/50 rounded">
+                        <span className="text-gray-300 font-mono">{p.path}</span>
+                        <span className="text-gray-500">{p.views} views · {p.visitors} visitors</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {analytics.top_sources?.length > 0 && (
+                <div className="bg-surface-800 rounded-xl p-4 border border-gray-700/50">
+                  <h4 className="text-sm font-medium mb-3">Top Sources</h4>
+                  <div className="space-y-1">
+                    {analytics.top_sources.map((s: any) => (
+                      <div key={s.source} className="flex justify-between text-xs p-2 bg-surface-900/50 rounded">
+                        <span className="text-gray-300">{s.source}</span>
+                        <span className="text-gray-500">{s.visitors} visitors</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {analytics.daily?.length > 0 && (
+                <div className="bg-surface-800 rounded-xl p-4 border border-gray-700/50">
+                  <h4 className="text-sm font-medium mb-3">Daily Traffic</h4>
+                  <div className="space-y-1">
+                    {analytics.daily.map((d: any) => (
+                      <div key={d.date} className="flex justify-between text-xs p-2 bg-surface-900/50 rounded">
+                        <span className="text-gray-400">{d.date}</span>
+                        <span className="text-gray-500">{d.pageviews} views · {d.visitors} visitors</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {tab === 'logs' && (
         <div className="bg-surface-800 rounded-xl border border-gray-700/50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700/50">
@@ -179,6 +247,15 @@ export default function SiteDetailPage() {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="bg-surface-800 rounded-xl p-3 border border-gray-700/50">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className={cn('text-lg font-semibold mt-1', color || 'text-gray-100')}>{value}</p>
     </div>
   )
 }

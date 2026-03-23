@@ -14,6 +14,12 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--accesslog=true"
+      - "--accesslog.filepath=/var/log/traefik/access.log"
+      - "--accesslog.format=json"
+      - "--accesslog.fields.headers.names.User-Agent=keep"
+      - "--accesslog.fields.headers.names.Referer=keep"
+      - "--accesslog.bufferingsize=50"
     ports:
       - "80:80"
       - "443:443"
@@ -21,6 +27,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
+      - traefik_logs:/var/log/traefik
     networks:
       - web
 
@@ -41,6 +48,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_PATH:-/opt/pleng/projects}:${PROJECTS_PATH:-/opt/pleng/projects}
       - platform_data:/data
+      - traefik_logs:/var/log/traefik:ro
     networks:
       - web
       - internal
@@ -151,3 +159,4 @@ volumes:
   platform_data:
   analytics_data:
   letsencrypt:
+  traefik_logs:
