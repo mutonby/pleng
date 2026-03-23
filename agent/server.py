@@ -29,6 +29,7 @@ PLATFORM_API_URL = os.environ.get("PLATFORM_API_URL", "http://platform-api:8000"
 
 # Fetch API key from platform-api on startup
 _platform_api_key = ""
+_api_key_ready = threading.Event()
 
 
 def _fetch_api_key():
@@ -48,12 +49,14 @@ def _fetch_api_key():
                         f.write(f'\nexport PLENG_API_KEY="{_platform_api_key}"\n')
                 except Exception:
                     pass
+                _api_key_ready.set()
                 return
         except Exception:
             pass
         logger.info(f"Waiting for platform-api... (attempt {attempt + 1})")
         time.sleep(2)
     logger.warning("Could not fetch API key from platform-api")
+    _api_key_ready.set()  # Unblock anyway — will work without key on internal network
 
 
 # Fetch on import (runs in background)
@@ -63,6 +66,9 @@ threading.Thread(target=_fetch_api_key, daemon=True).start()
 @app.route("/chat", methods=["POST"])
 def chat():
     """Send a message to Claude Code and get the response."""
+    if not _api_key_ready.wait(timeout=90):
+        return jsonify({"response": "Agent is starting up. Try again in a moment."}), 503
+
     data = request.get_json() or {}
     message = data.get("message", "")
     session_key = data.get("session_id", "default")

@@ -35,6 +35,8 @@ services:
       - DATABASE_PATH=/data/pleng.db
       - PROJECTS_DIR=${PROJECTS_PATH:-/opt/pleng/projects}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_PATH:-/opt/pleng/projects}:${PROJECTS_PATH:-/opt/pleng/projects}

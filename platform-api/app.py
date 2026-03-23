@@ -57,6 +57,10 @@ def startup():
     logger.info(f"  API Key:   {_api_key}")
     logger.info("=" * 60)
 
+    # Start health monitor
+    import monitor
+    monitor.start()
+
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):

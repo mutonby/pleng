@@ -11,6 +11,16 @@ DB_PATH = os.environ.get("DATABASE_PATH", "/data/pleng.db")
 def init():
     with _conn() as c:
         c.executescript("""
+            -- Migrations for existing DBs
+            PRAGMA foreign_keys = OFF;
+        """)
+        # Add consecutive_failures column if missing
+        try:
+            c.execute("ALTER TABLE sites ADD COLUMN consecutive_failures INTEGER DEFAULT 0")
+        except Exception:
+            pass  # Column already exists
+
+        c.executescript("""
             CREATE TABLE IF NOT EXISTS sites (
                 id TEXT PRIMARY KEY,
                 name TEXT UNIQUE NOT NULL,
@@ -22,6 +32,7 @@ def init():
                 github_url TEXT,
                 description TEXT,
                 ai_cost REAL DEFAULT 0,
+                consecutive_failures INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 deployed_at TEXT
@@ -120,6 +131,29 @@ def get_site_logs(site_id: str, limit: int = 50) -> list[dict]:
             (site_id, limit),
         )
         return [dict(r) for r in c.fetchall()]
+
+
+# ── Health monitoring ────────────────────────────────────
+
+def increment_failures(site_id: str) -> int:
+    """Increment consecutive failures and return new count."""
+    with _conn() as c:
+        c.execute("UPDATE sites SET consecutive_failures = consecutive_failures + 1 WHERE id = ?", (site_id,))
+        c.execute("SELECT consecutive_failures FROM sites WHERE id = ?", (site_id,))
+        row = c.fetchone()
+        return row["consecutive_failures"] if row else 0
+
+
+def get_failures(site_id: str) -> int:
+    with _conn() as c:
+        c.execute("SELECT consecutive_failures FROM sites WHERE id = ?", (site_id,))
+        row = c.fetchone()
+        return row["consecutive_failures"] if row else 0
+
+
+def reset_failures(site_id: str):
+    with _conn() as c:
+        c.execute("UPDATE sites SET consecutive_failures = 0 WHERE id = ?", (site_id,))
 
 
 # ── Settings / API Key ──────────────────────────────────
