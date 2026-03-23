@@ -89,10 +89,17 @@ def _parse_entry(entry: dict) -> dict | None:
         return None
 
     # Skip Pleng's own panel traffic
-    if "panel." in request or "sslip.io" in request:
-        # Keep sslip.io traffic for staging sites, but skip panel
-        if "panel." in request:
-            return None
+    if "panel." in request:
+        return None
+
+    # Skip requests by IP (bots scanning the server)
+    if request.replace(".", "").isdigit():
+        return None
+
+    # Skip health monitor (Docker internal IPs)
+    client_ip = entry.get("ClientAddr", "") or entry.get("ClientHost", "")
+    if client_ip.startswith("172.") or client_ip.startswith("10.") or client_ip.startswith("192.168."):
+        return None
 
     # Get path
     path = entry.get("RequestPath", "") or entry.get("request", {}).get("path", "/")
