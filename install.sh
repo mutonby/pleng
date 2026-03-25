@@ -80,10 +80,6 @@ fi
 # ── Gather config ──────────────────────────────────────
 
 header "Configuration"
-echo "You'll need: a Telegram bot token and your chat ID."
-echo "Get a bot token from @BotFather on Telegram."
-echo "Get your chat ID by messaging @userinfobot on Telegram."
-echo ""
 
 # Detect public IP
 DETECTED_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || curl -s --max-time 5 icanhazip.com 2>/dev/null || echo "")
@@ -97,11 +93,37 @@ if [ -f .env ] && [ -s .env ]; then
 fi
 
 if [ "${SKIP_ENV:-}" != "true" ]; then
-    ask "Telegram bot token:" TELEGRAM_BOT_TOKEN
-    [ -z "$TELEGRAM_BOT_TOKEN" ] && error "Bot token is required"
 
-    ask "Telegram chat ID:" TELEGRAM_CHAT_ID
+    # ── Step 1: Telegram bot token ─────────────────────
+    header "Step 1 — Telegram Bot"
+    echo "You need a Telegram bot. It takes 30 seconds:"
+    echo ""
+    echo "  1. Open Telegram and search for @BotFather"
+    echo "  2. Send: /newbot"
+    echo "  3. Choose a name (e.g. \"My Pleng\")"
+    echo "  4. Choose a username (e.g. \"my_pleng_bot\")"
+    echo "  5. BotFather gives you a token like: 123456:ABC-DEF..."
+    echo ""
+    ask "Paste your bot token here:" TELEGRAM_BOT_TOKEN
+    [ -z "$TELEGRAM_BOT_TOKEN" ] && error "Bot token is required"
+    ok "Bot token saved"
+
+    # ── Step 2: Chat ID ────────────────────────────────
+    echo ""
+    header "Step 2 — Your Chat ID"
+    echo "The bot will only respond to YOU. We need your chat ID:"
+    echo ""
+    echo "  1. Open Telegram and search for @userinfobot"
+    echo "  2. Send: /start"
+    echo "  3. It replies with your ID (a number like 123456789)"
+    echo ""
+    ask "Paste your chat ID here:" TELEGRAM_CHAT_ID
     [ -z "$TELEGRAM_CHAT_ID" ] && error "Chat ID is required"
+    ok "Chat ID saved"
+
+    # ── Step 3: Server config ──────────────────────────
+    echo ""
+    header "Step 3 — Server"
 
     ask "VPS public IP [$DETECTED_IP]:" PUBLIC_IP
     PUBLIC_IP=${PUBLIC_IP:-$DETECTED_IP}
