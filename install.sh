@@ -1,0 +1,201 @@
+#!/bin/bash
+# Pleng installer — from zero to your own cloud in one command.
+# Usage: curl -fsSL https://raw.githubusercontent.com/mutonby/pleng/main/install.sh | bash
+#
+# Requires: Ubuntu 22.04+ with root/sudo access, ports 80 and 443 open.
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()  { echo -e "${CYAN}→${NC} $1"; }
+ok()    { echo -e "${GREEN}✓${NC} $1"; }
+error() { echo -e "${RED}✗${NC} $1"; exit 1; }
+header() { echo -e "\n${BOLD}$1${NC}"; }
+
+# ── Checks ─────────────────────────────────────────────
+
+if [ "$(id -u)" -ne 0 ]; then
+    error "Run as root: curl -fsSL ... | sudo bash"
+fi
+
+if ! grep -qi ubuntu /etc/os-release 2>/dev/null; then
+    error "This installer is for Ubuntu only (22.04+)"
+fi
+
+header "🚀 Pleng Installer"
+echo "Your AI Platform Engineer — one VPS, one command, your own cloud."
+echo ""
+
+# ── Install Docker ─────────────────────────────────────
+
+if command -v docker &>/dev/null && docker compose version &>/dev/null; then
+    ok "Docker + Compose already installed"
+else
+    header "Installing Docker..."
+    apt-get update -qq
+    apt-get install -y -qq ca-certificates curl gnupg >/dev/null 2>&1
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null
+    chmod a+r /etc/apt/keyrings/docker.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+    apt-get update -qq
+    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+    systemctl enable --now docker >/dev/null 2>&1
+    ok "Docker installed"
+fi
+
+# ── Install Git ────────────────────────────────────────
+
+if ! command -v git &>/dev/null; then
+    info "Installing git..."
+    apt-get install -y -qq git >/dev/null 2>&1
+    ok "Git installed"
+fi
+
+# ── Clone Pleng ────────────────────────────────────────
+
+INSTALL_DIR="/opt/pleng"
+
+if [ -d "$INSTALL_DIR/pleng" ]; then
+    info "Pleng already cloned at $INSTALL_DIR/pleng — pulling latest..."
+    cd "$INSTALL_DIR/pleng"
+    git pull --ff-only 2>/dev/null || true
+else
+    header "Cloning Pleng..."
+    mkdir -p "$INSTALL_DIR"
+    git clone https://github.com/mutonby/pleng "$INSTALL_DIR/pleng"
+    cd "$INSTALL_DIR/pleng"
+    ok "Cloned to $INSTALL_DIR/pleng"
+fi
+
+# ── Gather config ──────────────────────────────────────
+
+header "Configuration"
+echo "You'll need: a Telegram bot token and your chat ID."
+echo "Get a bot token from @BotFather on Telegram."
+echo "Get your chat ID by messaging @userinfobot on Telegram."
+echo ""
+
+# Detect public IP
+DETECTED_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || curl -s --max-time 5 icanhazip.com 2>/dev/null || echo "")
+
+if [ -f .env ] && [ -s .env ]; then
+    echo -e "${CYAN}Existing .env found. Overwrite? (y/N):${NC} "
+    read -r OVERWRITE
+    if [ "$OVERWRITE" != "y" ] && [ "$OVERWRITE" != "Y" ]; then
+        ok "Keeping existing .env"
+        SKIP_ENV=true
+    fi
+fi
+
+if [ "${SKIP_ENV:-}" != "true" ]; then
+    echo -ne "${CYAN}Telegram bot token:${NC} "
+    read -r TELEGRAM_BOT_TOKEN
+    [ -z "$TELEGRAM_BOT_TOKEN" ] && error "Bot token is required"
+
+    echo -ne "${CYAN}Telegram chat ID:${NC} "
+    read -r TELEGRAM_CHAT_ID
+    [ -z "$TELEGRAM_CHAT_ID" ] && error "Chat ID is required"
+
+    echo -ne "${CYAN}VPS public IP [$DETECTED_IP]:${NC} "
+    read -r PUBLIC_IP
+    PUBLIC_IP=${PUBLIC_IP:-$DETECTED_IP}
+    [ -z "$PUBLIC_IP" ] && error "Public IP is required"
+
+    echo -ne "${CYAN}Email for SSL certs:${NC} "
+    read -r ACME_EMAIL
+    [ -z "$ACME_EMAIL" ] && error "Email is required for Let's Encrypt"
+
+    echo -ne "${CYAN}Dashboard password [auto-generated]:${NC} "
+    read -r WEB_UI_PASSWORD
+    WEB_UI_PASSWORD=${WEB_UI_PASSWORD:-$(openssl rand -hex 8)}
+
+    echo -ne "${CYAN}Claude auth mode (oauth/api_key) [oauth]:${NC} "
+    read -r CLAUDE_AUTH_MODE
+    CLAUDE_AUTH_MODE=${CLAUDE_AUTH_MODE:-oauth}
+
+    ANTHROPIC_API_KEY=""
+    if [ "$CLAUDE_AUTH_MODE" = "api_key" ]; then
+        echo -ne "${CYAN}Anthropic API key:${NC} "
+        read -r ANTHROPIC_API_KEY
+        [ -z "$ANTHROPIC_API_KEY" ] && error "API key is required when using api_key mode"
+    fi
+
+    # Write .env
+    cat > .env << ENVFILE
+# Generated by Pleng installer — $(date -u +"%Y-%m-%d %H:%M UTC")
+TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
+PUBLIC_IP=$PUBLIC_IP
+ACME_EMAIL=$ACME_EMAIL
+WEB_UI_PASSWORD=$WEB_UI_PASSWORD
+CLAUDE_AUTH_MODE=$CLAUDE_AUTH_MODE
+ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY
+PROJECTS_PATH=/opt/pleng/projects
+MODEL_NAME=claude-sonnet-4-20250514
+ENVFILE
+
+    ok ".env created"
+fi
+
+# ── Create directories ─────────────────────────────────
+
+mkdir -p /opt/pleng/projects /opt/pleng/backups
+ok "Directories ready"
+
+# ── Create Docker network ──────────────────────────────
+
+docker network create pleng_web 2>/dev/null || true
+
+# ── Start Pleng ────────────────────────────────────────
+
+header "Starting Pleng..."
+docker compose up -d --build 2>&1 | tail -5
+
+# Wait for platform-api to be healthy
+info "Waiting for platform-api to be ready..."
+for i in $(seq 1 30); do
+    if docker compose exec -T platform-api python -c "import requests; requests.get('http://localhost:8000/api/health', timeout=3)" 2>/dev/null; then
+        break
+    fi
+    sleep 2
+done
+
+ok "Pleng is running"
+
+# ── Summary ────────────────────────────────────────────
+
+# Read auto-generated password from .env
+PASS=$(grep WEB_UI_PASSWORD .env | cut -d= -f2)
+IP=$(grep PUBLIC_IP .env | cut -d= -f2)
+AUTH=$(grep CLAUDE_AUTH_MODE .env | cut -d= -f2)
+
+echo ""
+header "═══════════════════════════════════════════════"
+header "  Pleng is ready!"
+header "═══════════════════════════════════════════════"
+echo ""
+echo -e "  ${BOLD}Dashboard:${NC}  http://panel.${IP}.sslip.io"
+echo -e "  ${BOLD}Password:${NC}   ${PASS}"
+echo -e "  ${BOLD}Telegram:${NC}   Message your bot — say \"hello\""
+echo ""
+
+if [ "$AUTH" = "oauth" ]; then
+    echo -e "  ${CYAN}Next step:${NC} Log in Claude Code (OAuth):"
+    echo -e "  docker exec -it pleng-agent-1 sudo -u claude env HOME=/home/claude claude /login"
+    echo ""
+fi
+
+echo -e "  ${BOLD}Useful commands:${NC}"
+echo "  cd $INSTALL_DIR/pleng"
+echo "  make logs        # View all logs"
+echo "  make ps          # Container status"
+echo "  make chat        # Terminal chat with agent"
+echo ""
+echo -e "  ${GREEN}Your own cloud is live. Talk to it.${NC}"
+echo ""

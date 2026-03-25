@@ -9,7 +9,14 @@
 </p>
 
 <p align="center">
-  <a href="#what-you-get">What you get</a> · <a href="#quickstart">Quickstart</a> · <a href="#workflows">Workflows</a> · <a href="#how-to-talk-to-it">Talk to it</a> · <a href="#architecture">Architecture</a>
+  <a href="https://github.com/mutonby/pleng/actions/workflows/ci.yml"><img src="https://github.com/mutonby/pleng/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
+  <a href="https://github.com/mutonby/pleng/issues"><img src="https://img.shields.io/github/issues/mutonby/pleng" alt="Issues"></a>
+  <a href="https://github.com/mutonby/pleng/stargazers"><img src="https://img.shields.io/github/stars/mutonby/pleng" alt="Stars"></a>
+</p>
+
+<p align="center">
+  <a href="#what-you-get">What you get</a> · <a href="#quickstart">Quickstart</a> · <a href="#workflows">Workflows</a> · <a href="#how-to-talk-to-it">Talk to it</a> · <a href="#architecture">Architecture</a> · <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 ---
@@ -17,12 +24,18 @@
 ## One command. Your own cloud.
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/mutonby/pleng/main/install.sh | sudo bash
+```
+
+That's it. Fresh Ubuntu VPS → Docker, Pleng, SSL, Telegram bot, AI agent — all configured and running. The installer asks for your tokens interactively and handles everything.
+
+Or if you prefer doing it manually:
+
+```bash
 git clone https://github.com/mutonby/pleng && cd pleng
 cp .env.example .env  # add your tokens
 docker compose up -d
 ```
-
-That's it. You now have a complete platform running on your VPS — the kind of setup that normally takes days to configure, maintained by an AI agent that never sleeps.
 
 ## What you get
 
