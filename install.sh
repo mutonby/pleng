@@ -6,6 +6,9 @@
 
 set -euo pipefail
 
+# When piped from curl, stdin is the pipe — redirect reads to the terminal
+exec 3</dev/tty 2>/dev/null || exec 3<&0
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
@@ -16,6 +19,7 @@ info()  { echo -e "${CYAN}→${NC} $1"; }
 ok()    { echo -e "${GREEN}✓${NC} $1"; }
 error() { echo -e "${RED}✗${NC} $1"; exit 1; }
 header() { echo -e "\n${BOLD}$1${NC}"; }
+ask()   { echo -ne "${CYAN}$1${NC} "; read -r "$2" <&3; }
 
 # ── Checks ─────────────────────────────────────────────
 
@@ -40,7 +44,7 @@ else
     apt-get update -qq
     apt-get install -y -qq ca-certificates curl gnupg >/dev/null 2>&1
     install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null
     chmod a+r /etc/apt/keyrings/docker.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
     apt-get update -qq
@@ -85,8 +89,7 @@ echo ""
 DETECTED_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || curl -s --max-time 5 icanhazip.com 2>/dev/null || echo "")
 
 if [ -f .env ] && [ -s .env ]; then
-    echo -e "${CYAN}Existing .env found. Overwrite? (y/N):${NC} "
-    read -r OVERWRITE
+    ask "Existing .env found. Overwrite? (y/N):" OVERWRITE
     if [ "$OVERWRITE" != "y" ] && [ "$OVERWRITE" != "Y" ]; then
         ok "Keeping existing .env"
         SKIP_ENV=true
@@ -94,35 +97,28 @@ if [ -f .env ] && [ -s .env ]; then
 fi
 
 if [ "${SKIP_ENV:-}" != "true" ]; then
-    echo -ne "${CYAN}Telegram bot token:${NC} "
-    read -r TELEGRAM_BOT_TOKEN
+    ask "Telegram bot token:" TELEGRAM_BOT_TOKEN
     [ -z "$TELEGRAM_BOT_TOKEN" ] && error "Bot token is required"
 
-    echo -ne "${CYAN}Telegram chat ID:${NC} "
-    read -r TELEGRAM_CHAT_ID
+    ask "Telegram chat ID:" TELEGRAM_CHAT_ID
     [ -z "$TELEGRAM_CHAT_ID" ] && error "Chat ID is required"
 
-    echo -ne "${CYAN}VPS public IP [$DETECTED_IP]:${NC} "
-    read -r PUBLIC_IP
+    ask "VPS public IP [$DETECTED_IP]:" PUBLIC_IP
     PUBLIC_IP=${PUBLIC_IP:-$DETECTED_IP}
     [ -z "$PUBLIC_IP" ] && error "Public IP is required"
 
-    echo -ne "${CYAN}Email for SSL certs:${NC} "
-    read -r ACME_EMAIL
+    ask "Email for SSL certs:" ACME_EMAIL
     [ -z "$ACME_EMAIL" ] && error "Email is required for Let's Encrypt"
 
-    echo -ne "${CYAN}Dashboard password [auto-generated]:${NC} "
-    read -r WEB_UI_PASSWORD
-    WEB_UI_PASSWORD=${WEB_UI_PASSWORD:-$(openssl rand -hex 8)}
+    ask "Dashboard password [auto-generated]:" WEB_UI_PASSWORD
+    WEB_UI_PASSWORD=${WEB_UI_PASSWORD:-$(openssl rand -hex 8 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 16)}
 
-    echo -ne "${CYAN}Claude auth mode (oauth/api_key) [oauth]:${NC} "
-    read -r CLAUDE_AUTH_MODE
+    ask "Claude auth mode (oauth/api_key) [oauth]:" CLAUDE_AUTH_MODE
     CLAUDE_AUTH_MODE=${CLAUDE_AUTH_MODE:-oauth}
 
     ANTHROPIC_API_KEY=""
     if [ "$CLAUDE_AUTH_MODE" = "api_key" ]; then
-        echo -ne "${CYAN}Anthropic API key:${NC} "
-        read -r ANTHROPIC_API_KEY
+        ask "Anthropic API key:" ANTHROPIC_API_KEY
         [ -z "$ANTHROPIC_API_KEY" ] && error "API key is required when using api_key mode"
     fi
 
@@ -148,6 +144,12 @@ fi
 mkdir -p /opt/pleng/projects /opt/pleng/backups
 ok "Directories ready"
 
+# ── Prepare OAuth mounts ───────────────────────────────
+
+# Docker creates directories for missing bind mounts — prevent that
+mkdir -p ~/.claude
+[ ! -f ~/.claude.json ] && echo '{}' > ~/.claude.json
+
 # ── Create Docker network ──────────────────────────────
 
 docker network create pleng_web 2>/dev/null || true
@@ -159,14 +161,21 @@ docker compose up -d --build 2>&1 | tail -5
 
 # Wait for platform-api to be healthy
 info "Waiting for platform-api to be ready..."
+READY=false
 for i in $(seq 1 30); do
     if docker compose exec -T platform-api python -c "import requests; requests.get('http://localhost:8000/api/health', timeout=3)" 2>/dev/null; then
+        READY=true
         break
     fi
     sleep 2
 done
 
-ok "Pleng is running"
+if [ "$READY" = true ]; then
+    ok "Pleng is running"
+else
+    echo ""
+    info "Platform API is still starting. Check logs with: docker compose logs -f platform-api"
+fi
 
 # ── Summary ────────────────────────────────────────────
 
