@@ -6,11 +6,10 @@ import { statusColors, cn, formatDate } from '../lib/utils'
 
 export default function Dashboard({ setup }: { setup: any }) {
   const [sites, setSites] = useState<any[]>([])
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    api.get('/sites').then((d) => setSites(Array.isArray(d) ? d : [])).catch(() => {
-      // 401 → api.ts redirects to /login automatically
-    })
+    api.get('/sites').then((d) => { setSites(Array.isArray(d) ? d : []); setLoaded(true) }).catch(() => setLoaded(true))
     const interval = setInterval(() => {
       api.get('/sites').then((d) => setSites(Array.isArray(d) ? d : [])).catch(() => {})
     }, 10000)
@@ -23,10 +22,13 @@ export default function Dashboard({ setup }: { setup: any }) {
   const botName = setup?.telegram_bot || ''
   const telegramOk = setup?.telegram_configured || false
 
+  // Wait for first fetch before deciding what to show
+  if (!loaded) {
+    return <p className="text-gray-500">Loading...</p>
+  }
+
   // Auth issue: setup says sites exist but we can't fetch them
-  const hasSitesButCantSee = setup?.sites_count > 0 && sites.length === 0
-  if (hasSitesButCantSee) {
-    // Force re-login
+  if (setup?.sites_count > 0 && sites.length === 0) {
     localStorage.removeItem('pleng_auth')
     window.location.href = '/login'
     return null
