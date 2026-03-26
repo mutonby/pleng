@@ -618,18 +618,18 @@ def api_push_git(site_id: str, body: PushGit):
         # Fix ownership issue (agent creates files as uid 1000, platform-api runs as root)
         _git("config", "--global", "--add", "safe.directory", workspace)
 
-        # Init if needed
+        # Always ensure clean git state
         if not os.path.exists(os.path.join(workspace, ".git")):
             _git("init")
-            _git("branch", "-M", "main")
+        _git("checkout", "-B", "main")  # Create/switch to main branch
 
         # Set remote
         _git("remote", "remove", "origin")
         _git("remote", "add", "origin", clone_url)
 
-        # Add, commit, push
+        # Add all files, commit, push
         _git("add", "-A")
-        commit_result = _git("commit", "-m", body.message, "--allow-empty")
+        _git("commit", "-m", body.message, "--allow-empty")
         push_result = _git("push", "-u", "origin", "main")
 
         if push_result.returncode != 0:
