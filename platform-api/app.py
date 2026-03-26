@@ -610,7 +610,9 @@ def api_push_git(site_id: str, body: PushGit):
         env["GIT_COMMITTER_EMAIL"] = "pleng@automated.dev"
 
         def _git(*args):
-            r = subprocess.run(["git"] + list(args), cwd=workspace, capture_output=True, text=True, env=env, timeout=30)
+            r = subprocess.run(["git"] + list(args), cwd=workspace, capture_output=True, text=True, env=env, timeout=60)
+            if r.returncode != 0 and "already exists" not in r.stderr:
+                logger.error(f"git {' '.join(args)} failed: {r.stderr[:300]}")
             return r
 
         # Fix ownership issue (agent creates files as uid 1000, platform-api runs as root)
@@ -627,8 +629,12 @@ def api_push_git(site_id: str, body: PushGit):
 
         # Add, commit, push
         _git("add", "-A")
-        _git("commit", "-m", body.message, "--allow-empty")
-        result = _git("push", "-u", "origin", "main")
+        commit_result = _git("commit", "-m", body.message, "--allow-empty")
+        push_result = _git("push", "-u", "origin", "main")
+
+        if push_result.returncode != 0:
+            error = push_result.stderr[:300]
+            raise RuntimeError(f"git push failed: {error}")
 
         repo_url = f"https://github.com/{repo}"
         db.update_site(site["id"], github_url=repo_url)
