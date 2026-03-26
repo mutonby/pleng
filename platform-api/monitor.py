@@ -261,8 +261,8 @@ def _run_heartbeat(hb: dict):
 
             if not response:
                 logger.warning(f"Heartbeat [{name}]: agent did not respond")
-            elif name == "quick" and response.strip().upper() == "OK":
-                # Quick check: silence when everything is fine
+            elif response.strip().upper() == "OK":
+                # Silent when everything is fine (any level)
                 logger.info(f"Heartbeat [{name}]: OK")
             else:
                 safe = html.escape(response)

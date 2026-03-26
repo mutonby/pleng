@@ -1,42 +1,34 @@
 # Pleng Heartbeat
 
-Each section defines a check level. monitor.py reads this file
-and schedules checks automatically. The agent runs the commands
-and reports via Telegram.
+Each section defines a check level. The agent runs the commands
+and reports via Telegram ONLY if something is wrong.
 
-## quick | 30m
+## quick | 120m
 
-Run:
-1. `pleng docker-ps`
-2. `pleng system`
+Run: `pleng system` and `pleng docker-ps`
 
-If everything is normal (containers running, RAM <90%, disk <85%, reasonable load),
-respond ONLY with: "OK"
+If everything is normal (all containers running, RAM <90%, disk <85%), respond ONLY with the single word: OK
 
-If something is wrong, explain what in 1-2 lines and recommend an action.
-Be extremely concise. This runs every 5 minutes.
+If something is wrong, explain in 1-2 lines.
 
-## deep | 60m
+## deep | 240m
 
 Run:
-1. `pleng docker-ps`
+1. `pleng system`
 2. `pleng docker-stats`
-3. `pleng system`
-4. `pleng errors --minutes 30`
-5. `pleng logs-summary`
+3. `pleng errors --minutes 60`
+4. `pleng logs-summary`
 
-Analyze resource usage per container, recent errors, and log anomalies.
-Give a 2-3 line summary. If something is unusual, detail what and why.
-If everything is fine, confirm with a brief summary.
+If everything is normal, respond ONLY with: OK
 
-## full | 120m
+If something is unusual (high resource usage, errors, containers restarting), give a 2-3 line summary.
 
-Run:
-1. `pleng health-report`
+## full | 1440m
 
-Review in depth: system resources, all container states,
-Traefik errors, logs from all deployed sites.
+Run: `pleng health-report`
 
-Give a complete system status report.
-Include trends if you notice patterns (e.g., memory rising, recurring errors).
-ALWAYS respond even if everything is fine — this is the full audit.
+This is the daily audit (every 24h). Always give a brief status report (5-10 lines max):
+- System resources (disk, RAM, load)
+- Container count and status
+- Any errors or anomalies
+- One line conclusion
