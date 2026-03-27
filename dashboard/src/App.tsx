@@ -38,48 +38,50 @@ export default function App() {
   return (
     <ProtectedRoute>
       <div className="flex h-screen">
-        <aside className="w-52 bg-surface-800 border-r border-gray-700/50 flex flex-col">
-          <div className="p-4 border-b border-gray-700/50">
-            <h1 className="text-lg font-bold text-primary-400">Pleng</h1>
-            <p className="text-xs text-gray-500">AI Platform Engineer</p>
+        <aside className="w-52 bg-surface-850/80 backdrop-blur-xl border-r border-border flex flex-col">
+          <div className="p-4 border-b border-border">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-mono font-extrabold tracking-tight text-primary-400">pleng</h1>
+              <span className="w-2 h-2 rounded-full bg-primary-400 animate-pulse-dot" />
+            </div>
+            <p className="text-[0.65rem] font-mono uppercase tracking-[0.15em] text-gray-500 mt-0.5">AI Platform Engineer</p>
           </div>
           <nav className="flex-1 p-2 space-y-1">
             {navItems.map(({ path, label, icon: Icon }) => (
               <Link key={path} to={path}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-mono transition-all duration-200',
                   location.pathname === path
-                    ? 'bg-primary-600/20 text-primary-400'
-                    : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
+                    ? 'bg-primary-500/15 text-primary-400 border border-primary-500/20'
+                    : 'text-gray-500 hover:bg-surface-700/50 hover:text-gray-300 border border-transparent'
                 )}>
-                <Icon size={18} />
+                <Icon size={16} />
                 {label}
               </Link>
             ))}
           </nav>
 
-          {/* Telegram bot link */}
           {botName && (
-            <div className="p-3 border-t border-gray-700/50">
+            <div className="p-3 border-t border-border">
               <a href={`https://t.me/${botName}`} target="_blank" rel="noreferrer"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-blue-400 hover:bg-blue-600/10 transition-colors">
-                <MessageCircle size={16} />
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono text-primary-400/70 hover:text-primary-400 hover:bg-primary-500/10 transition-all duration-200">
+                <MessageCircle size={14} />
                 @{botName}
               </a>
             </div>
           )}
 
-          <div className="p-3 border-t border-gray-700/50">
+          <div className="p-3 border-t border-border">
             <button
               onClick={() => { localStorage.removeItem('pleng_auth'); window.location.href = '/login' }}
-              className="text-xs text-gray-500 hover:text-gray-300"
+              className="text-[0.7rem] font-mono uppercase tracking-wider text-gray-600 hover:text-gray-400 transition-colors"
             >
               Logout
             </button>
           </div>
         </aside>
 
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto p-6 bg-surface-900">
           <Routes>
             <Route path="/" element={<Dashboard setup={setup} />} />
             <Route path="/sites" element={<SitesPage />} />
