@@ -41,13 +41,42 @@ INTERNAL_NETS = [
 ]
 
 
+_web_nets: list = []
+
+
+def _hosted_site_nets() -> list:
+    """Subnets of the pleng_web network. Every hosted site joins it, so a request
+    from there is a site container (internet-facing code), never a platform
+    service: it must not get the internal no-auth path or the API key."""
+    global _web_nets
+    if not _web_nets:
+        try:
+            r = subprocess.run(
+                ["docker", "network", "inspect", deployer.NETWORK,
+                 "--format", "{{range .IPAM.Config}}{{.Subnet}} {{end}}"],
+                capture_output=True, text=True, timeout=5)
+            _web_nets = [ipaddress.ip_network(s) for s in r.stdout.split() if s]
+        except Exception as e:
+            logger.warning(f"Could not read {deployer.NETWORK} subnets: {e}")
+    return _web_nets
+
+
 def _is_internal(ip: str) -> bool:
-    """Check if request comes from Docker internal network."""
+    """Check if request comes from a platform service on the Docker internal
+    network (agent, telegram bot), not from a hosted site on pleng_web."""
     try:
         addr = ipaddress.ip_address(ip)
-        return any(addr in net for net in INTERNAL_NETS)
     except ValueError:
         return False
+    if addr.is_loopback:
+        return True
+    if not any(addr in net for net in INTERNAL_NETS):
+        return False
+    web = _hosted_site_nets()
+    if not web:
+        # Unknown site subnet: fail closed, the caller must use the API key.
+        return False
+    return not any(addr in net for net in web)
 
 
 _dashboard_password = ""
